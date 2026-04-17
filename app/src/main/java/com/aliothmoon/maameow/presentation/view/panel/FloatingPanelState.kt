@@ -7,13 +7,15 @@ import androidx.compose.runtime.Stable
  */
 enum class PanelTab(val displayName: String) {
     TASKS("一键长草"),
+
+    EPIC7("第七史诗"),
     AUTO_BATTLE("自动战斗"),
     TOOLS("小工具"),
     LOG("日志");
 
     companion object {
         fun canShowTaskActions(state: PanelTab): Boolean {
-            return state == TASKS || state == AUTO_BATTLE || state == TOOLS
+            return state == TASKS || state == AUTO_BATTLE || state == TOOLS || state == EPIC7
         }
     }
 }

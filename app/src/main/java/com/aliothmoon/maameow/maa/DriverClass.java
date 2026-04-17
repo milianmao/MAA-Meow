@@ -16,6 +16,7 @@ public final class DriverClass {
     }
 
     public static boolean startApp(String packageName, int displayId, boolean forceStop) {
+        Ln.i("我进来了哦");
         if (displayId == PrimaryDisplayManager.DISPLAY_ID) {
             return ActivityUtils.startApp(packageName, displayId, forceStop);
         }

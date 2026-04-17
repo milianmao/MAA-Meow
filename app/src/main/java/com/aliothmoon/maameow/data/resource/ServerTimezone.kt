@@ -22,7 +22,8 @@ object ServerTimezone {
         "txwy" to 8,
         "YoStarEN" to -7,
         "YoStarJP" to 9,
-        "YoStarKR" to 9
+        "YoStarKR" to 9,
+        "epic7" to 8
     )
 
     /**

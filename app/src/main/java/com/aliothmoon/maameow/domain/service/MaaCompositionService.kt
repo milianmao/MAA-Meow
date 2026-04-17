@@ -39,6 +39,18 @@ import org.koin.java.KoinJavaComponent.inject
 import timber.log.Timber
 import java.util.concurrent.atomic.AtomicReference
 
+/**
+ * MaaCompositionService 负责协调 MaaCore 实例的启动/停止、显示层与任务链的组合逻辑。
+ *
+ * 主要职责：
+ * - 加载并校验运行所需资源
+ * - 创建并配置 MaaCore 实例
+ * - 启动虚拟显示并与 MaaCore 建立连接
+ * - 将任务追加到 MaaCore 并启动执行
+ *
+ * 注：仅添加注释，不修改业务逻辑。
+ * @author YML
+ */
 class MaaCompositionService(
     private val context: Context,
     private val resourceLoader: MaaResourceLoader,
@@ -67,6 +79,10 @@ class MaaCompositionService(
         setRunState(state)
     }
 
+    /**
+     * 根据 MaaExecutionState 更新内部状态并在需要时启动或停止 TaskExecutionService
+     * @author YML
+     */
     private fun setRunState(state: MaaExecutionState) {
         _state.value = state
         when (state) {
@@ -86,6 +102,10 @@ class MaaCompositionService(
 
     private val connectDeferred = AtomicReference<CompletableDeferred<Boolean>?>()
 
+    /**
+     * 启动流程的结果类型集合，表示各种可能的启动状态或错误原因
+     * @author YML
+     */
     sealed class StartResult {
         data class Success(val version: String) : StartResult()
 
@@ -122,8 +142,15 @@ class MaaCompositionService(
         data object PortraitOrientationError : StartResult()
     }
 
+    /**
+     * 停止流程的结果类型
+     * @author YML
+     */
     sealed class StopResult {
+        /** 停止成功 */
         data object Success : StopResult()
+
+        /** 停止失败 */
         data object Failed : StopResult()
     }
 
@@ -153,6 +180,12 @@ class MaaCompositionService(
         }
     }
 
+    /**
+     * 统一处理来自 MaaCore 的回调：优先处理 async connect 的回调，否则转发给回调分发器
+     * @param msg 回调消息码
+     * @param json 回调携带的 JSON 字符串（可为 null）
+     * @author YML
+     */
     fun handleCallback(msg: Int, json: String?) {
         if (onAsyncConnectCallback(msg, json)) return
         callbackDispatcher.dispatch(msg, json)
@@ -162,6 +195,11 @@ class MaaCompositionService(
         override fun onCallback(msg: Int, json: String?) = handleCallback(msg, json)
     }
 
+    /**
+     * 异步连接回调处理：用于 AsyncConnect 的结果解析与 CompletableDeferred 完成
+     * @return 如果该回调为 async connect 的回调则返回 true（已处理），否则返回 false
+     * @author YML
+     */
     private fun onAsyncConnectCallback(msg: Int, json: String?): Boolean {
         if (msg != AsstMsg.AsyncCallInfo.value) return false
         val deferred = connectDeferred.get() ?: return true
@@ -174,6 +212,14 @@ class MaaCompositionService(
         return true
     }
 
+    /**
+     * 启动执行任务的入口方法，会调用 executeStart 完成完整的启动流程
+     * @param tasks 要执行的任务列表
+     * @param clientType 客户端类型标识，默认从 taskChainState 获取
+     * @param onSessionStarted 可选的会话开始回调
+     * @return 启动结果封装在 StartResult 中
+     * @author YML
+     */
     suspend fun start(
         tasks: List<MaaTaskParams>,
         clientType: String = taskChainState.getClientType(),
@@ -196,6 +242,18 @@ class MaaCompositionService(
         successMessage = "自动战斗开始运行",
     )
 
+    /**
+     * 启动自动战斗（简化的 start 入口）
+     * @param tasks 要执行的任务列表
+     * @param clientType 客户端类型标识
+     * @return 启动结果
+     * @author YML
+     */
+
+    /**
+     * 启动失败时的统一处理：设置运行状态、记录日志并结束会话
+     * @author YML
+     */
     private suspend fun failStart(
         message: String, sessionStatus: String, result: StartResult
     ): StartResult {
@@ -205,6 +263,11 @@ class MaaCompositionService(
         return result
     }
 
+    /**
+     * 检查启动前置条件：资源加载、前台模式方向校验等
+     * @return 若有错误则返回对应的 StartResult，否则返回 null
+     * @author YML
+     */
     private suspend fun checkPreconditions(mode: RunMode): StartResult? {
         activityManager.runIfDirty { resourceLoader.load() }
         val loaded = resourceLoader.ensureLoaded()
@@ -226,6 +289,11 @@ class MaaCompositionService(
         return null
     }
 
+    /**
+     * 确保 MaaCore 实例已创建并设置必要选项（如触控模式）
+     * @return 若初始化失败返回对应 StartResult，否则返回 null
+     * @author YML
+     */
     private suspend fun ensureMaaInstance(maa: MaaCoreService): StartResult? {
         if (maa.hasInstance()) return null
         if (!maa.CreateInstance(callback)) {
@@ -243,6 +311,12 @@ class MaaCompositionService(
         return null
     }
 
+    /**
+     * 发起异步连接并等待结果（带超时）
+     * @param config 连接配置 JSON 字符串
+     * @return 若连接失败或超时则返回对应的 StartResult，否则返回 null
+     * @author YML
+     */
     private suspend fun asyncConnect(maa: MaaCoreService, config: String): StartResult? {
         val deferred = CompletableDeferred<Boolean>()
         connectDeferred.set(deferred)
@@ -258,6 +332,10 @@ class MaaCompositionService(
         return null
     }
 
+    /**
+     * 设置显示并建立与 MaaCore 的连接（包含前台/后台分支逻辑）
+     * @author YML
+     */
     private suspend fun setupDisplayAndConnect(
         service: RemoteService, maa: MaaCoreService, mode: RunMode, clientType: String
     ): StartResult? {
@@ -280,12 +358,22 @@ class MaaCompositionService(
 
             RunMode.BACKGROUND -> {
                 val r = resolveAndSetResolution(service, clientType)
+                // 打印displayId
+                Timber.i("Virtual display id: %d", displayId)
                 buildConnectConfig(r.width, r.height, displayId)
             }
         }
         return asyncConnect(maa, config)
     }
 
+    /**
+     * 将任务追加到 MaaCore 并启动执行；会记录任务 id 并跟踪状态
+     * @param maa MaaCore 服务实例
+     * @param tasks 待追加的任务列表
+     * @param successMessage 启动成功时记录的信息
+     * @param mode 运行模式（前台/后台）
+     * @author YML
+     */
     private suspend fun appendTasksAndStart(
         maa: MaaCoreService,
         tasks: List<MaaTaskParams>,
@@ -311,6 +399,14 @@ class MaaCompositionService(
         return StartResult.Success(maa.GetVersion())
     }
 
+    /**
+     * 执行启动主流程：资源检查、创建实例、显示设置、���加任务并启动
+     * @param tasks 要执行的任务列表
+     * @param clientType 客户端类型标识
+     * @param startMessage 会话开始时的日志信息
+     * @param successMessage 启动成功后的日志信息
+     * @author YML
+     */
     private suspend fun executeStart(
         tasks: List<MaaTaskParams>,
         clientType: String,
@@ -318,28 +414,45 @@ class MaaCompositionService(
         successMessage: String,
         onSessionStarted: (suspend () -> Unit)? = null,
     ): StartResult {
+        // 将状态置为 STARTING，外部（如 TaskExecutionService）会响应并启动前台通知
         setRunState(MaaExecutionState.STARTING)
+
+        // 开始一个新的会话（记录任务链的入参类型），用于会话日志管理
         sessionLogger.startSession(tasks.map { it.type.value })
+
+        // 重置子任务处理器的会话相关状态，保证新会话干净开始
         subTaskHandler.resetSessionState()
+
+        // 如果调用方传入了会话开始的自定义回调，异步调用它（可选）
         onSessionStarted?.invoke()
+
+        // 记录会话开始的日志信息（阻塞直到写入完成）
         sessionLogger.appendAndWait(startMessage, LogLevel.INFO)
 
         val mode = appSettings.runMode.value
         return withContext(Dispatchers.IO) {
+            // 检查启动前置条件（资源是否加载、前台模式方向校验等）
             checkPreconditions(mode)?.let { return@withContext it }
 
+            // 使用 RemoteService 提供的连接上下文执行 MaaCore 相关操作
             useRemoteService { service ->
                 val maa = service.maaCoreService
+
+                // 确保 MaaCore 实例已创建并设置必要选项（例如触控模式）
                 ensureMaaInstance(maa)?.let { return@useRemoteService it }
 
+                // 根据运行模式设置显示并与 MaaCore 建立连接（包含虚拟显示、AsyncConnect 等）
                 setupDisplayAndConnect(
                     service,
                     maa,
                     mode,
                     clientType
                 )?.let { return@useRemoteService it }
+
+                // 将任务追加到 MaaCore 并启动执行；启动成功后会切换到 RUNNING
                 val result = appendTasksAndStart(maa, tasks, successMessage, mode)
                 if (result is StartResult.Success) {
+                    // 记录最后一次使用的客户端类型，便于下次默认选择
                     taskChainState.saveLastUsedClientType(clientType)
                 }
                 result
@@ -377,6 +490,11 @@ class MaaCompositionService(
         }.toString()
     }
 
+    /**
+     * 构造连接给 MaaCore 的配置 JSON（包含分辨率与 displayId）
+     * @author YML
+     */
+
     suspend fun stop(): StopResult {
         return useRemoteService { service ->
             val maa = service.maaCoreService
@@ -395,6 +513,10 @@ class MaaCompositionService(
         }
     }
 
+    /**
+     * 停止虚拟显示并重置相关状态
+     * @author YML
+     */
     suspend fun stopVirtualDisplay() {
         appWatchdog.stopWatching()
         _displayResolution.value = defaultResolution

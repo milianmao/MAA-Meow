@@ -107,6 +107,11 @@ android {
         aidl = true
         compose = true
     }
+    // Compose compiler extension: 使用版本目录中声明的 compose_compiler
+    composeOptions {
+        // 使用硬编码的保守候选版本，避免版本目录访问器在此处不可用导致解析错误
+        kotlinCompilerExtensionVersion = "1.6.0"
+    }
 
     externalNativeBuild {
         cmake {

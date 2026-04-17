@@ -13,5 +13,5 @@ enum class TaskTypeInfo(
     MALL("信用收支", { MallConfig() }),
     MISSION("领取奖励", { AwardConfig() }),
     AUTO_ROGUELIKE("自动肉鸽", { RoguelikeConfig() }),
-    RECLAMATION("生息演算", { ReclamationConfig() });
+    RECLAMATION("生息演算", { ReclamationConfig() }),
 }

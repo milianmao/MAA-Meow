@@ -1,4 +1,5 @@
 package com.aliothmoon.maameow.data.model
+import androidx.compose.ui.tooling.preview.Preview
 import com.aliothmoon.maameow.maa.task.MaaTaskParams
 import com.aliothmoon.maameow.maa.task.MaaTaskType
 import com.aliothmoon.maameow.data.model.TaskParamProvider
@@ -57,7 +58,8 @@ data class WakeUpConfig(
             "YoStarEN" to "国际服(YoStarEN)",
             "YoStarJP" to "日服(YoStarJP)",
             "YoStarKR" to "韩服(YoStarKR)",
-            "txwy" to "繁中服(txwy)"
+            "txwy" to "繁中服(txwy)",
+            "epic7" to "第七史诗国际服"
         )
 
         /**
@@ -65,7 +67,7 @@ data class WakeUpConfig(
          * 用于资源更新等逻辑
          */
         fun getServerType(clientType: String): String = when (clientType) {
-            "Official", "Bilibili", "" -> "CN"
+            "Official", "Bilibili","epic7", "" -> "CN"
             "YoStarEN" -> "US"
             "YoStarJP" -> "JP"
             "YoStarKR" -> "KR"
@@ -80,7 +82,7 @@ data class WakeUpConfig(
     fun getServerType(): String = Companion.getServerType(clientType)
     override fun toTaskParams(): MaaTaskParams {
         val normalizedAccountName = accountName.trim()
-        val canSwitchAccount = clientType == "Official" || clientType == "Bilibili"
+        val canSwitchAccount = clientType == "Official" || clientType == "Bilibili" || clientType == "epic7"
         val paramsJson = buildJsonObject {
             put("client_type", clientType)
             put("start_game_enabled", startGameEnabled)

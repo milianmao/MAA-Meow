@@ -1,0 +1,38 @@
+# Exclude large, binary, and non-source directories to reduce token usage
+# Build outputs
+**/build/
+**/bin/
+**/gen/
+**/out/
+.externalNativeBuild/
+android/.cxx/
+
+# Gradle related
+.gradle/
+gradle/wrapper/
+
+# IDE/Editor config
+.idea/
+.vscode/
+*.iml
+
+# Native binaries and assets
+# (Exclude high-volume downloaded native libs, include source code)
+/app/src/main/jniLibs/
+/app/src/main/assets/MaaSync/
+.maa-cache/
+/app/src/main/assets/shizuku.apk
+
+# Log/Cache files
+*.log
+*.jks
+*.b64
+captures/
+local.properties
+
+# Version control
+.git/
+
+# Large docs or screenshots
+docs/screenshots/
+
