@@ -21,6 +21,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
@@ -38,10 +39,12 @@ import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.aliothmoon.maameow.R
 import com.aliothmoon.maameow.data.model.TaskChainNode
 import sh.calvin.reorderable.ReorderableColumn
 
@@ -82,14 +85,14 @@ fun TaskListPanel(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = if (isProfileMode) Icons.Default.Check else Icons.Default.List,
+                    imageVector = if (isProfileMode) Icons.Default.Check else Icons.AutoMirrored.Filled.List,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
                     tint = if (isProfileMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = if (isProfileMode) "完成" else "编辑配置",
+                    text = if (isProfileMode) stringResource(R.string.common_done) else stringResource(R.string.panel_task_list_edit_config),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = if (isProfileMode) FontWeight.Bold else FontWeight.Normal,
                     color = if (isProfileMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
@@ -126,7 +129,7 @@ fun TaskListPanel(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = if (isEditMode) "完成" else "编辑任务",
+                    text = if (isEditMode) stringResource(R.string.common_done) else stringResource(R.string.panel_task_list_edit_tasks),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = if (isEditMode) FontWeight.Bold else FontWeight.Normal,
                     color = if (isEditMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
@@ -166,7 +169,7 @@ fun TaskListPanel(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            "新增任务",
+                            stringResource(R.string.panel_task_list_add),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface
                         )

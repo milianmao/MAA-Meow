@@ -22,11 +22,24 @@ object DefaultDisplayConfig {
 
     data class Resolution(val width: Int, val height: Int, val dpi: Int)
 
+    val RES_720P = Resolution(1280, 720, 160)
+    val RES_1080P = Resolution(1920, 1080, 240)
+
+    /** 用户可选的后台虚拟屏分辨率偏好 */
+    enum class ResolutionPreference { P720, P1080 }
+
     /**
-     * YoStarEN → 1080p，其他 → 720p
+     * 根据用户偏好 + clientType 解析最终分辨率。
+     * YoStarEN 静默强制 1080p；其他客户端使用用户偏好。
      */
-    fun resolveResolution(clientType: String): Resolution = when (clientType) {
-        "YoStarEN" -> Resolution(1920, 1080, 240)
-        else -> Resolution(WIDTH, HEIGHT, DPI)
+    fun resolveResolution(
+        clientType: String,
+        preference: ResolutionPreference
+    ): Resolution {
+        if (clientType == "YoStarEN") return RES_1080P
+        return when (preference) {
+            ResolutionPreference.P720 -> RES_720P
+            ResolutionPreference.P1080 -> RES_1080P
+        }
     }
 }

@@ -5,6 +5,8 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.preferencesDataStore
+import com.aliothmoon.maameow.R
+import com.aliothmoon.maameow.constant.DefaultDisplayConfig
 import com.aliothmoon.maameow.data.model.update.UpdateChannel
 import com.aliothmoon.maameow.data.model.update.UpdateSource
 import com.aliothmoon.maameow.domain.models.AppSettings
@@ -312,10 +314,10 @@ class AppSettingsManager(private val context: Context) {
     }
 
     // 内部通知级别
-    enum class EventNotificationLevel(val displayName: String) {
-        OFF("关闭"),
-        DEFAULT("静默"),
-        HIGH("弹出"),
+    enum class EventNotificationLevel(@param:androidx.annotation.StringRes val labelRes: Int) {
+        OFF(R.string.notification_level_off),
+        DEFAULT(R.string.notification_level_default),
+        HIGH(R.string.notification_level_high),
     }
 
     val eventNotificationLevel: StateFlow<EventNotificationLevel> = settings
@@ -333,6 +335,51 @@ class AppSettingsManager(private val context: Context) {
     suspend fun setEventNotificationLevel(level: EventNotificationLevel) {
         with(AppSettingsSchema) {
             context.dataStore.edit { it[eventNotificationLevel] = level.name }
+        }
+    }
+
+    // 后台虚拟屏分辨率
+    val backgroundResolution: StateFlow<DefaultDisplayConfig.ResolutionPreference> = settings
+        .map {
+            runCatching { DefaultDisplayConfig.ResolutionPreference.valueOf(it.backgroundResolution) }
+                .getOrDefault(DefaultDisplayConfig.ResolutionPreference.P720)
+        }
+        .distinctUntilChanged()
+        .stateIn(
+            scope, SharingStarted.Eagerly,
+            runCatching { DefaultDisplayConfig.ResolutionPreference.valueOf(initialSettings.backgroundResolution) }
+                .getOrDefault(DefaultDisplayConfig.ResolutionPreference.P720)
+        )
+
+    suspend fun setBackgroundResolution(pref: DefaultDisplayConfig.ResolutionPreference) {
+        with(AppSettingsSchema) {
+            context.dataStore.edit { it[backgroundResolution] = pref.name }
+        }
+    }
+
+    // 应用语言
+    enum class AppLanguage(val tag: String) {
+        // 仅用于兼容旧数据；启动时会被收敛成显式语言。
+        SYSTEM(""),
+        ZH("zh"),
+        EN("en"),
+    }
+
+    val language: StateFlow<AppLanguage> = settings
+        .map {
+            runCatching { AppLanguage.valueOf(it.language) }
+                .getOrDefault(AppLanguage.SYSTEM)
+        }
+        .distinctUntilChanged()
+        .stateIn(
+            scope, SharingStarted.Eagerly,
+            runCatching { AppLanguage.valueOf(initialSettings.language) }
+                .getOrDefault(AppLanguage.SYSTEM)
+        )
+
+    suspend fun setLanguage(lang: AppLanguage) {
+        with(AppSettingsSchema) {
+            context.dataStore.edit { it[language] = lang.name }
         }
     }
 

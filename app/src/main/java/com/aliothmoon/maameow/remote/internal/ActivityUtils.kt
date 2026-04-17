@@ -19,8 +19,14 @@ object ActivityUtils {
             if (displayId != 0) {
                 launchOptions.setLaunchDisplayId(displayId)
             }
-            val ret = am.startActivity(intent, launchOptions.toBundle())
-            if (ret != 0) {
+            val ret = try {
+                am.startActivity(intent, launchOptions.toBundle())
+            } catch (e: Exception) {
+                Ln.w("startActivity failed, returning -1", e)
+                -1
+            }
+            if (ret < 0) {
+                Ln.w("startActivity returned error code $ret, fallback to am command")
                 return startViaAmCommand(intent, displayId)
             }
             return true
@@ -68,16 +74,10 @@ object ActivityUtils {
 
     private fun startViaAmCommand(intent: Intent, displayId: Int): Boolean {
         try {
-            val component = intent.component ?: return false
-            val cmd = buildString {
-                append("am start")
-                append(" --display $displayId")
-                intent.action?.let { append(" -a $it") }
-                append(" -n ${component.flattenToShortString()}")
-                append(" -f ${intent.flags}")
-            }
-            Ln.d("Executing: $cmd")
-            val process = Runtime.getRuntime().exec(cmd)
+            val intentUri = intent.toUri(Intent.URI_INTENT_SCHEME)
+            val args = arrayOf("am", "start", "--display", displayId.toString(), intentUri)
+            Ln.d("Executing: am start --display $displayId <intent-uri>")
+            val process = Runtime.getRuntime().exec(args)
             val exitCode = process.waitFor()
             if (exitCode != 0) {
                 Ln.w("am command exited with code $exitCode")

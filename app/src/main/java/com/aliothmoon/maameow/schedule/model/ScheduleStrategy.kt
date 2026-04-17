@@ -12,6 +12,14 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
+@Serializable
+enum class ScheduleType {
+    /** 固定星期 + 时刻 */
+    FIXED_TIME,
+    /** 指定开始时间 + 间隔周期 */
+    INTERVAL,
+}
+
 /** 将 DayOfWeek 序列化为 ISO 数值（1=周一 … 7=周日） */
 object DayOfWeekSerializer : KSerializer<DayOfWeek> {
     override val descriptor: SerialDescriptor =
@@ -46,10 +54,16 @@ data class ScheduleStrategy(
     /** 策略名称 */
     val name: String,
     val enabled: Boolean = true,
-    /** 启用的星期，使用 ISO 值序列化 */
-    val daysOfWeek: Set<@Serializable(with = DayOfWeekSerializer::class) DayOfWeek>,
-    /** 每日触发时刻列表，已排序，格式 "HH:mm" */
-    val executionTimes: List<@Serializable(with = LocalTimeSerializer::class) LocalTime>,
+    /** 调度类型，默认固定时间（向后兼容） */
+    val scheduleType: ScheduleType = ScheduleType.FIXED_TIME,
+    /** [FIXED_TIME] 启用的星期，使用 ISO 值序列化 */
+    val daysOfWeek: Set<@Serializable(with = DayOfWeekSerializer::class) DayOfWeek> = emptySet(),
+    /** [FIXED_TIME] 每日触发时刻列表，已排序，格式 "HH:mm" */
+    val executionTimes: List<@Serializable(with = LocalTimeSerializer::class) LocalTime> = emptyList(),
+    /** [INTERVAL] 首次执行的绝对时间（epoch ms） */
+    val startTimeMs: Long? = null,
+    /** [INTERVAL] 执行间隔（分钟） */
+    val intervalMinutes: Int? = null,
     /** 关联的任务配置 Profile ID */
     val profileId: String,
     /** 触发时若有任务运行，强制停止后再启动 */

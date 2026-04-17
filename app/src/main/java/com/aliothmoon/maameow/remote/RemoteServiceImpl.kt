@@ -17,6 +17,7 @@ import com.aliothmoon.maameow.remote.internal.PowerController
 import com.aliothmoon.maameow.remote.internal.PrimaryDisplayManager
 import com.aliothmoon.maameow.remote.internal.ScreenManager
 import com.aliothmoon.maameow.remote.internal.VirtualDisplayManager
+import com.aliothmoon.maameow.third.FakeContext
 import com.aliothmoon.maameow.third.Ln
 import com.aliothmoon.maameow.third.Workarounds
 import java.io.File
@@ -245,6 +246,16 @@ class RemoteServiceImpl : RemoteService.Stub() {
     override fun heartbeat(pid: Int) {
         appPid.set(pid)
         Ln.i("$TAG: heartbeat received, app pid=$pid")
+    }
+
+    override fun isPackageInstalled(packageName: String): Boolean {
+        return try {
+            FakeContext.get().packageManager.getPackageInfo(packageName, 0)
+            true
+        } catch (e: Exception) {
+            Ln.w("$TAG: isPackageInstalled: $packageName not found")
+            false
+        }
     }
 
     override fun startActivity(intent: Intent): Boolean {

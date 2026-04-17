@@ -26,6 +26,7 @@ import com.aliothmoon.maameow.utils.Misc
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -76,6 +77,10 @@ class MaaCompositionService(
         _displayResolution.asStateFlow()
 
     override fun reportRunState(state: MaaExecutionState) {
+        // STOPPING 期间，回调不主动设 IDLE — 由 finishStop() 统一处理
+        if (_state.value == MaaExecutionState.STOPPING && state == MaaExecutionState.IDLE) {
+            return
+        }
         setRunState(state)
     }
 
@@ -92,7 +97,7 @@ class MaaCompositionService(
             MaaExecutionState.IDLE, MaaExecutionState.ERROR ->
                 TaskExecutionService.stop(context)
 
-            else -> {}
+            MaaExecutionState.STOPPING, MaaExecutionState.RUNNING -> {}
         }
     }
 
@@ -464,14 +469,16 @@ class MaaCompositionService(
         service: RemoteService,
         clientType: String
     ): DefaultDisplayConfig.Resolution {
-        val r = DefaultDisplayConfig.resolveResolution(clientType)
+        val preference = appSettings.backgroundResolution.value
+        val r = DefaultDisplayConfig.resolveResolution(clientType, preference)
         service.setVirtualDisplayResolution(r.width, r.height, r.dpi)
         Timber.i(
-            "Virtual display resolution: %dx%d@%d for client=%s",
+            "Virtual display resolution: %dx%d@%d for client=%s, pref=%s",
             r.width,
             r.height,
             r.dpi,
-            clientType
+            clientType,
+            preference
         )
         _displayResolution.value = r
         return r
@@ -496,21 +503,46 @@ class MaaCompositionService(
      */
 
     suspend fun stop(): StopResult {
-        return useRemoteService { service ->
-            val maa = service.maaCoreService
-            when {
-                !maa.Running() || maa.Stop() -> StopResult.Success
-                else -> StopResult.Failed
-            }.also {
-                setRunState(MaaExecutionState.IDLE)
-                val status = if (it is StopResult.Success) "STOPPED" else "STOP_FAILED"
-                sessionLogger.append(
-                    "任务停止，状态: $status",
-                    if (it is StopResult.Success) LogLevel.INFO else LogLevel.ERROR
-                )
-                sessionLogger.endSession(status)
+        setRunState(MaaExecutionState.STOPPING)
+        sessionLogger.appendAndWait("正在停止任务...", LogLevel.INFO)
+
+        return withContext(Dispatchers.IO) {
+            useRemoteService { service ->
+                val maa = service.maaCoreService
+                if (!maa.Running()) {
+                    return@useRemoteService finishStop(StopResult.Success)
+                }
+
+                if (!maa.Stop()) {
+                    return@useRemoteService finishStop(StopResult.Failed)
+                }
+
+                // 轮询等待 Core 真正停止，60 秒超时
+                var elapsed = 0
+                while (maa.Running() && elapsed < 60_000) {
+                    delay(100)
+                    elapsed += 100
+                }
+
+                if (maa.Running()) {
+                    finishStop(StopResult.Failed)
+                } else {
+                    finishStop(StopResult.Success)
+                }
             }
         }
+    }
+
+    private fun finishStop(result: StopResult): StopResult {
+        appWatchdog.stopWatching()
+        setRunState(MaaExecutionState.IDLE)
+        val status = if (result is StopResult.Success) "STOPPED" else "STOP_FAILED"
+        sessionLogger.append(
+            "任务停止，状态: $status",
+            if (result is StopResult.Success) LogLevel.INFO else LogLevel.ERROR
+        )
+        sessionLogger.endSession(status)
+        return result
     }
 
     /**

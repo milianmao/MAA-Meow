@@ -58,4 +58,6 @@ interface RemoteService {
     oneway void setTouchCallback(ITouchEventCallback callback) = 26;
 
     boolean startActivity(in Intent intent) = 27;
+
+    boolean isPackageInstalled(String packageName) = 28;
 }

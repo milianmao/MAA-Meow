@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import com.aliothmoon.maameow.schedule.model.ScheduleType
 import com.aliothmoon.maameow.schedule.model.ScheduledExecutionRequest
 import com.aliothmoon.maameow.schedule.model.ScheduleStrategy
 import timber.log.Timber
@@ -75,19 +76,17 @@ class ScheduleAlarmManager(private val context: Context) {
         strategies.filter { it.enabled }.forEach { scheduleNext(it) }
     }
 
-    /**
-     * 计算策略的下一个触发时间。
-     *
-     * 逻辑:
-     * 1. 获取当前时间 (ZonedDateTime.now())
-     * 2. 从今天开始，检查未来7天
-     * 3. 对于每天，如果 dayOfWeek in strategy.daysOfWeek:
-     *    - 遍历 strategy.executionTimes（已排序）
-     *    - 组合成 ZonedDateTime
-     *    - 如果在当前时间之后，返回这个时间
-     * 4. 如果7天内无匹配，返回 null
-     */
     fun computeNextTrigger(strategy: ScheduleStrategy, afterEpochMs: Long = 0L): ZonedDateTime? {
+        return when (strategy.scheduleType) {
+            ScheduleType.FIXED_TIME -> computeNextFixedTime(strategy, afterEpochMs)
+            ScheduleType.INTERVAL -> computeNextInterval(strategy, afterEpochMs)
+        }
+    }
+
+    /**
+     * [FIXED_TIME] 扫描未来 7 天，匹配 dayOfWeek + executionTimes。
+     */
+    private fun computeNextFixedTime(strategy: ScheduleStrategy, afterEpochMs: Long): ZonedDateTime? {
         if (strategy.daysOfWeek.isEmpty() || strategy.executionTimes.isEmpty()) {
             return null
         }
@@ -113,6 +112,29 @@ class ScheduleAlarmManager(private val context: Context) {
         }
 
         return null
+    }
+
+    /**
+     * [INTERVAL] 从 startTimeMs 起，每隔 intervalMinutes 触发一次。
+     * 计算公式: next = startTime + ceil((baseline - startTime) / interval) * interval
+     */
+    private fun computeNextInterval(strategy: ScheduleStrategy, afterEpochMs: Long): ZonedDateTime? {
+        val startMs = strategy.startTimeMs ?: return null
+        val intervalMs = (strategy.intervalMinutes ?: return null) * 60_000L
+        if (intervalMs <= 0) return null
+
+        val now = System.currentTimeMillis()
+        val baseline = maxOf(now, afterEpochMs)
+
+        val nextMs = if (startMs > baseline) {
+            startMs
+        } else {
+            val elapsed = baseline - startMs
+            val n = elapsed / intervalMs + 1
+            startMs + n * intervalMs
+        }
+
+        return Instant.ofEpochMilli(nextMs).atZone(ZoneId.systemDefault())
     }
 
     private fun buildPendingIntent(strategyId: String, scheduledTimeMs: Long): PendingIntent {

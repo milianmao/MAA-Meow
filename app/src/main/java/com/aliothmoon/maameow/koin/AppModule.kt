@@ -50,6 +50,7 @@ import com.aliothmoon.maameow.manager.PermissionManager
 import com.aliothmoon.maameow.overlay.OverlayController
 import com.aliothmoon.maameow.overlay.OverlayViewModelOwner
 import com.aliothmoon.maameow.overlay.border.BorderOverlayManager
+import com.aliothmoon.maameow.overlay.screensaver.HardwareScreenOffManager
 import com.aliothmoon.maameow.overlay.screensaver.ScreenSaverOverlayManager
 import com.aliothmoon.maameow.data.notification.NotificationSettingsManager
 import com.aliothmoon.maameow.data.notification.provider.BarkProvider
@@ -151,6 +152,7 @@ val appModule = module {
 
 
     singleOf(::BorderOverlayManager)
+    singleOf(::HardwareScreenOffManager)
     singleOf(::ScreenSaverOverlayManager)
     singleOf(::OverlayViewModelOwner)
     singleOf(::OverlayController)

@@ -7,16 +7,21 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -26,6 +31,9 @@ import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
@@ -34,9 +42,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimeInput
 import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,15 +58,21 @@ import android.os.Build
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import com.aliothmoon.maameow.R
 import com.aliothmoon.maameow.presentation.components.TopAppBar
 import com.aliothmoon.maameow.presentation.components.tip.ExpandableTipContent
 import com.aliothmoon.maameow.presentation.components.tip.ExpandableTipIcon
+import com.aliothmoon.maameow.schedule.model.ScheduleType
+import com.aliothmoon.maameow.utils.i18n.asString
 import org.koin.androidx.compose.koinViewModel
 import java.time.DayOfWeek
+import java.time.Instant
 import java.time.LocalTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -67,6 +83,7 @@ fun ScheduleEditView(
     viewModel: ScheduleEditViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val errorMessage = state.errorMessage.asString()
     val snackbarHostState = remember { SnackbarHostState() }
     var showTimePicker by remember { mutableStateOf(false) }
     var editingTime by remember { mutableStateOf<LocalTime?>(null) }
@@ -87,9 +104,9 @@ fun ScheduleEditView(
         }
     }
 
-    LaunchedEffect(state.errorMessage) {
-        state.errorMessage?.let {
-            snackbarHostState.showSnackbar(it)
+    LaunchedEffect(errorMessage) {
+        if (errorMessage.isNotBlank()) {
+            snackbarHostState.showSnackbar(errorMessage)
             viewModel.onDismissError()
         }
     }
@@ -97,7 +114,11 @@ fun ScheduleEditView(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = if (state.isNew) "新建策略" else "编辑策略",
+                title = if (state.isNew) {
+                    stringResource(R.string.schedule_edit_title_new)
+                } else {
+                    stringResource(R.string.schedule_edit_title_edit)
+                },
                 navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
                 onNavigationClick = { navController.popBackStack() },
                 actions = {
@@ -110,7 +131,7 @@ fun ScheduleEditView(
                         )
                     } else {
                         TextButton(onClick = { viewModel.onSave() }) {
-                            Text("保存")
+                            Text(stringResource(R.string.schedule_save))
                         }
                     }
                 }
@@ -124,7 +145,7 @@ fun ScheduleEditView(
                 .padding(padding)
         ) {
             item {
-                SectionHeader("基本信息")
+                SectionHeader(stringResource(R.string.schedule_section_basic_info))
             }
             if (!state.isNew && state.strategyId != null) {
                 item {
@@ -140,8 +161,8 @@ fun ScheduleEditView(
                 OutlinedTextField(
                     value = state.name,
                     onValueChange = viewModel::onNameChanged,
-                    label = { Text("策略名称") },
-                    placeholder = { Text("如：日常任务") },
+                    label = { Text(stringResource(R.string.schedule_name)) },
+                    placeholder = { Text(stringResource(R.string.schedule_name_placeholder)) },
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -150,94 +171,246 @@ fun ScheduleEditView(
             }
 
             item {
-                SectionHeader("执行日期")
+                SectionHeader(stringResource(R.string.schedule_section_type))
             }
             item {
-                FlowRow(
+                SingleChoiceSegmentedButtonRow(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        .padding(horizontal = 16.dp)
                 ) {
-                    val chipColors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primary,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-                    )
-                    val allSelected = DayOfWeek.entries.all { it in state.daysOfWeek }
-                    FilterChip(
-                        selected = allSelected,
-                        onClick = { viewModel.onToggleAllDays() },
-                        label = { Text("每天") },
-                        colors = chipColors
-                    )
-                    DayOfWeek.entries.forEach { day ->
-                        FilterChip(
-                            selected = day in state.daysOfWeek,
-                            onClick = { viewModel.onToggleDay(day) },
-                            label = { Text(dayDisplayName(day)) },
-                            colors = chipColors
-                        )
+                    ScheduleType.entries.forEachIndexed { index, type ->
+                        SegmentedButton(
+                            selected = state.scheduleType == type,
+                            onClick = { viewModel.onScheduleTypeChanged(type) },
+                            shape = SegmentedButtonDefaults.itemShape(
+                                index = index,
+                                count = ScheduleType.entries.size,
+                                baseShape = RoundedCornerShape(4.dp)
+                            )
+                        ) {
+                            Text(
+                                when (type) {
+                                    ScheduleType.FIXED_TIME -> stringResource(R.string.schedule_type_fixed_time)
+                                    ScheduleType.INTERVAL -> stringResource(R.string.schedule_type_interval)
+                                }
+                            )
+                        }
                     }
                 }
             }
 
-            item {
-                SectionHeader("执行时间")
-            }
-            item {
-                val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-                FlowRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    state.executionTimes.forEach { time ->
-                        InputChip(
-                            selected = false,
-                            onClick = {
-                                editingTime = time
-                                showTimePicker = true
-                            },
-                            label = { Text(time.format(timeFormatter)) },
-                            trailingIcon = {
-                                IconButton(
-                                    onClick = { viewModel.onRemoveTime(time) },
-                                    modifier = Modifier.size(18.dp)
-                                ) {
+            when (state.scheduleType) {
+                ScheduleType.FIXED_TIME -> {
+                    item {
+                        SectionHeader(stringResource(R.string.schedule_section_days))
+                    }
+                    item {
+                        FlowRow(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            val chipColors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                            val allSelected = DayOfWeek.entries.all { it in state.daysOfWeek }
+                            FilterChip(
+                                selected = allSelected,
+                                onClick = { viewModel.onToggleAllDays() },
+                                label = { Text(stringResource(R.string.schedule_every_day)) },
+                                colors = chipColors
+                            )
+                            DayOfWeek.entries.forEach { day ->
+                                FilterChip(
+                                    selected = day in state.daysOfWeek,
+                                    onClick = { viewModel.onToggleDay(day) },
+                                    label = { Text(scheduleDayChipLabel(day)) },
+                                    colors = chipColors
+                                )
+                            }
+                        }
+                    }
+
+                    item {
+                        SectionHeader(stringResource(R.string.schedule_section_times))
+                    }
+                    item {
+                        val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+                        FlowRow(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            state.executionTimes.forEach { time ->
+                                InputChip(
+                                    selected = false,
+                                    onClick = {
+                                        editingTime = time
+                                        showTimePicker = true
+                                    },
+                                    label = { Text(time.format(timeFormatter)) },
+                                    trailingIcon = {
+                                        IconButton(
+                                            onClick = { viewModel.onRemoveTime(time) },
+                                            modifier = Modifier.size(18.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = stringResource(R.string.common_delete),
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        }
+                                    }
+                                )
+                            }
+                            AssistChip(
+                                onClick = {
+                                    editingTime = null
+                                    showTimePicker = true
+                                },
+                                label = { Text(stringResource(R.string.schedule_add_time)) },
+                                leadingIcon = {
                                     Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = "删除",
-                                        modifier = Modifier.size(14.dp)
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
                                     )
+                                }
+                            )
+                        }
+                    }
+                }
+
+                ScheduleType.INTERVAL -> {
+                    item {
+                        SectionHeader(stringResource(R.string.schedule_section_start_time))
+                    }
+                    item {
+                        var showDatePicker by remember { mutableStateOf(false) }
+                        var showStartTimePicker by remember { mutableStateOf(false) }
+                        // 暂存选中的日期，等时间也选完后一起写入
+                        var pendingDateMs by remember { mutableStateOf<Long?>(null) }
+
+                        val displayText = state.startTimeMs?.let { ms ->
+                            val zdt = Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault())
+                            zdt.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+                        } ?: stringResource(R.string.schedule_tap_to_choose)
+
+                        OutlinedTextField(
+                            value = displayText,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text(stringResource(R.string.schedule_first_execution_time)) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }.also { source ->
+                                LaunchedEffect(source) {
+                                    source.interactions.collect { interaction ->
+                                        if (interaction is androidx.compose.foundation.interaction.PressInteraction.Release) {
+                                            showDatePicker = true
+                                        }
+                                    }
                                 }
                             }
                         )
-                    }
-                    AssistChip(
-                        onClick = {
-                            editingTime = null
-                            showTimePicker = true
-                        },
-                        label = { Text("添加时间") },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
+
+                        if (showDatePicker) {
+                            val datePickerState = rememberDatePickerState(
+                                initialSelectedDateMillis = state.startTimeMs
+                                    ?: System.currentTimeMillis()
+                            )
+                            DatePickerDialog(
+                                onDismissRequest = { showDatePicker = false },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        pendingDateMs = datePickerState.selectedDateMillis
+                                        showDatePicker = false
+                                        showStartTimePicker = true
+                                    }) { Text(stringResource(R.string.schedule_next_step)) }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { showDatePicker = false }) { Text(stringResource(R.string.common_cancel)) }
+                                }
+                            ) {
+                                DatePicker(state = datePickerState)
+                            }
+                        }
+
+                        if (showStartTimePicker) {
+                            val existingTime = state.startTimeMs?.let { ms ->
+                                Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).toLocalTime()
+                            }
+                            TimePickerDialog(
+                                initialTime = existingTime,
+                                onDismiss = { showStartTimePicker = false },
+                                onConfirm = { time ->
+                                    val dateMs = pendingDateMs ?: return@TimePickerDialog
+                                    val date = Instant.ofEpochMilli(dateMs)
+                                        .atZone(ZoneId.of("UTC"))
+                                        .toLocalDate()
+                                    val combined = date.atTime(time)
+                                        .atZone(ZoneId.systemDefault())
+                                        .toInstant()
+                                        .toEpochMilli()
+                                    viewModel.onStartTimeChanged(combined)
+                                    showStartTimePicker = false
+                                }
                             )
                         }
-                    )
+                    }
+
+                    item {
+                        SectionHeader(stringResource(R.string.schedule_section_interval))
+                    }
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = if (state.intervalDays > 0) state.intervalDays.toString() else "",
+                                onValueChange = { viewModel.onIntervalDaysChanged(it.toIntOrNull() ?: 0) },
+                                label = { Text(stringResource(R.string.schedule_days_unit)) },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                modifier = Modifier.width(80.dp)
+                            )
+                            OutlinedTextField(
+                                value = if (state.intervalHours > 0) state.intervalHours.toString() else "",
+                                onValueChange = { viewModel.onIntervalHoursChanged(it.toIntOrNull() ?: 0) },
+                                label = { Text(stringResource(R.string.schedule_hours_unit)) },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                modifier = Modifier.width(80.dp)
+                            )
+                            val totalMinutes = state.intervalDays * 24 * 60 + state.intervalHours * 60
+                            if (totalMinutes > 0) {
+                                Text(
+                                    text = stringResource(R.string.schedule_total_hours, totalMinutes / 60),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
             item {
-                SectionHeader("任务配置")
+                SectionHeader(stringResource(R.string.schedule_section_task_config))
             }
             item {
                 if (state.profiles.isEmpty()) {
                     Text(
-                        text = "请先在操作面板中创建任务配置",
+                        text = stringResource(R.string.schedule_no_profiles),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 16.dp)
@@ -268,7 +441,7 @@ fun ScheduleEditView(
                         ?.joinToString("、") { it.name }
                     if (!enabledTasks.isNullOrEmpty()) {
                         Text(
-                            text = "已启用: $enabledTasks",
+                            text = stringResource(R.string.schedule_enabled_tasks, enabledTasks),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp)
@@ -278,7 +451,7 @@ fun ScheduleEditView(
             }
 
             item {
-                SectionHeader("高级选项")
+                SectionHeader(stringResource(R.string.schedule_section_advanced))
                 val (expanded, setExpanded) = remember { mutableStateOf(false) }
                 Row(
                     modifier = Modifier
@@ -291,7 +464,7 @@ fun ScheduleEditView(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("强制启动", style = MaterialTheme.typography.bodyLarge)
+                        Text(stringResource(R.string.schedule_force_start), style = MaterialTheme.typography.bodyLarge)
                         ExpandableTipIcon(
                             modifier = Modifier.padding(start = 8.dp),
                             expanded = expanded,
@@ -304,7 +477,7 @@ fun ScheduleEditView(
                 }
                 ExpandableTipContent(
                     visible = expanded,
-                    tipText = "强制启动任务，会中断正在运行的游戏和任务",
+                    tipText = stringResource(R.string.schedule_force_start_tip),
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
             }
@@ -330,17 +503,22 @@ fun ScheduleEditView(
     if (showPermissionDialog) {
         val context = LocalContext.current
         val tips = buildList {
-            if (state.needBatteryOptimization) add("关闭电池优化")
-            if (state.needExactAlarm) add("允许精确闹钟")
+            if (state.needBatteryOptimization) add(stringResource(R.string.schedule_permission_tip_battery_optimization))
+            if (state.needExactAlarm) add(stringResource(R.string.schedule_permission_tip_exact_alarm))
         }
         AlertDialog(
             onDismissRequest = {
                 showPermissionDialog = false
                 navController.popBackStack()
             },
-            title = { Text("权限提示") },
+            title = { Text(stringResource(R.string.schedule_permission_title)) },
             text = {
-                Text("为确保定时任务正常触发，请前往系统设置${tips.joinToString("、")}。")
+                Text(
+                    stringResource(
+                        R.string.schedule_permission_message,
+                        tips.joinToString(stringResource(R.string.common_enumeration_separator))
+                    )
+                )
             },
             confirmButton = {
                 TextButton(onClick = {
@@ -362,13 +540,13 @@ fun ScheduleEditView(
                     }
                     showPermissionDialog = false
                     navController.popBackStack()
-                }) { Text("前往设置") }
+                }) { Text(stringResource(R.string.schedule_go_to_settings)) }
             },
             dismissButton = {
                 TextButton(onClick = {
                     showPermissionDialog = false
                     navController.popBackStack()
-                }) { Text("稍后") }
+                }) { Text(stringResource(R.string.schedule_later)) }
             }
         )
     }
@@ -407,7 +585,7 @@ private fun TimePickerDialog(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "选择时间",
+                    text = stringResource(R.string.schedule_time_picker_title),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
@@ -425,26 +603,22 @@ private fun TimePickerDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     TextButton(onClick = { showDial = !showDial }) {
-                        Text(if (showDial) "键盘输入" else "表盘选择")
+                        Text(
+                            if (showDial) {
+                                stringResource(R.string.schedule_time_picker_keyboard_input)
+                            } else {
+                                stringResource(R.string.schedule_time_picker_dial_selection)
+                            }
+                        )
                     }
                     Row {
-                        TextButton(onClick = onDismiss) { Text("取消") }
+                        TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
                         TextButton(onClick = {
                             onConfirm(LocalTime.of(timePickerState.hour, timePickerState.minute))
-                        }) { Text("确认") }
+                        }) { Text(stringResource(R.string.common_confirm)) }
                     }
                 }
             }
         }
     }
-}
-
-private fun dayDisplayName(day: DayOfWeek): String = when (day) {
-    DayOfWeek.MONDAY -> "周一"
-    DayOfWeek.TUESDAY -> "周二"
-    DayOfWeek.WEDNESDAY -> "周三"
-    DayOfWeek.THURSDAY -> "周四"
-    DayOfWeek.FRIDAY -> "周五"
-    DayOfWeek.SATURDAY -> "周六"
-    DayOfWeek.SUNDAY -> "周日"
 }

@@ -3,22 +3,35 @@ package com.aliothmoon.maameow.domain.usecase
 import com.aliothmoon.maameow.data.model.AwardConfig
 import com.aliothmoon.maameow.data.model.TaskChainNode
 import com.aliothmoon.maameow.data.model.WakeUpConfig
+import com.aliothmoon.maameow.data.preferences.AppSettingsManager
+import com.aliothmoon.maameow.data.preferences.TaskChainState
+import com.aliothmoon.maameow.domain.models.RunMode
 import com.aliothmoon.maameow.domain.service.AppAliveChecker
 import com.aliothmoon.maameow.remote.AppAliveStatus
+import io.mockk.every
+import io.mockk.mockk
 import junit.framework.TestCase.assertEquals
 import junit.framework.TestCase.assertTrue
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 
 class PrepareTaskStartUseCaseTest {
 
-    private val analyzeTaskChainUseCase = AnalyzeTaskChainUseCase()
+    private val taskChainState = mockk<TaskChainState> {
+        every { getClientType() } returns "Official"
+    }
+    private val analyzeTaskChainUseCase = AnalyzeTaskChainUseCase(taskChainState)
+    private val appSettings = mockk<AppSettingsManager> {
+        every { runMode } returns MutableStateFlow(RunMode.BACKGROUND)
+    }
 
     @Test
     fun manualStart_requiresConfirmation_whenGameIsDeadAndNoWakeUpLaunchConfigured() = runBlocking {
         val useCase = PrepareTaskStartUseCase(
             analyzeTaskChainUseCase = analyzeTaskChainUseCase,
             appAliveChecker = FakeAppAliveChecker(AppAliveStatus.DEAD),
+            appSettings = appSettings,
         )
 
         val result = useCase(
@@ -29,7 +42,6 @@ class PrepareTaskStartUseCaseTest {
         assertEquals(
             TaskStartDecision.RequiresConfirmation(
                 reason = TaskStartDecisionReason.GAME_NOT_RUNNING_WITHOUT_WAKE_UP,
-                message = PrepareTaskStartUseCase.NO_WAKE_UP_WARNING_MESSAGE,
                 acknowledgement = TaskStartAcknowledgement.GAME_NOT_RUNNING_WITHOUT_WAKE_UP,
             ),
             result
@@ -41,6 +53,7 @@ class PrepareTaskStartUseCaseTest {
         val useCase = PrepareTaskStartUseCase(
             analyzeTaskChainUseCase = analyzeTaskChainUseCase,
             appAliveChecker = FakeAppAliveChecker(AppAliveStatus.DEAD),
+            appSettings = appSettings,
         )
 
         val result = useCase(
@@ -51,7 +64,6 @@ class PrepareTaskStartUseCaseTest {
         assertEquals(
             TaskStartDecision.Blocked(
                 reason = TaskStartDecisionReason.GAME_NOT_RUNNING_WITHOUT_WAKE_UP,
-                message = PrepareTaskStartUseCase.SCHEDULED_NO_WAKE_UP_FAILURE_MESSAGE,
             ),
             result
         )
@@ -62,6 +74,7 @@ class PrepareTaskStartUseCaseTest {
         val useCase = PrepareTaskStartUseCase(
             analyzeTaskChainUseCase = analyzeTaskChainUseCase,
             appAliveChecker = FakeAppAliveChecker(AppAliveStatus.DEAD),
+            appSettings = appSettings,
         )
 
         val result = useCase(
@@ -81,6 +94,7 @@ class PrepareTaskStartUseCaseTest {
         val useCase = PrepareTaskStartUseCase(
             analyzeTaskChainUseCase = analyzeTaskChainUseCase,
             appAliveChecker = checker,
+            appSettings = appSettings,
         )
 
         val result = useCase(
@@ -103,6 +117,7 @@ class PrepareTaskStartUseCaseTest {
         val useCase = PrepareTaskStartUseCase(
             analyzeTaskChainUseCase = analyzeTaskChainUseCase,
             appAliveChecker = FakeAppAliveChecker(AppAliveStatus.UNKNOWN),
+            appSettings = appSettings,
         )
 
         val result = useCase(
@@ -118,6 +133,7 @@ class PrepareTaskStartUseCaseTest {
         val useCase = PrepareTaskStartUseCase(
             analyzeTaskChainUseCase = analyzeTaskChainUseCase,
             appAliveChecker = FakeAppAliveChecker(AppAliveStatus.ALIVE),
+            appSettings = appSettings,
         )
 
         val result = useCase(
@@ -127,11 +143,75 @@ class PrepareTaskStartUseCaseTest {
 
         assertEquals(
             TaskStartDecision.Blocked(
-                reason = TaskStartDecisionReason.INVALID_CHAIN,
-                message = "请先选择要执行的任务",
+                reason = TaskStartDecisionReason.NO_TASK_SELECTED,
             ),
             result
         )
+    }
+
+    @Test
+    fun manualStart_requiresConfirmation_whenGameNotInstalled() = runBlocking {
+        val useCase = PrepareTaskStartUseCase(
+            analyzeTaskChainUseCase = analyzeTaskChainUseCase,
+            appAliveChecker = FakeAppAliveChecker(AppAliveStatus.ALIVE),
+            appSettings = appSettings,
+            isPackageInstalled = { false },
+        )
+
+        val result = useCase(
+            chain = listOf(TaskChainNode(name = "领取奖励", enabled = true, config = AwardConfig())),
+            context = TaskStartContext(mode = TaskStartMode.MANUAL),
+        )
+
+        assertEquals(
+            TaskStartDecision.RequiresConfirmation(
+                reason = TaskStartDecisionReason.GAME_NOT_INSTALLED,
+                acknowledgement = TaskStartAcknowledgement.GAME_NOT_INSTALLED,
+            ),
+            result
+        )
+    }
+
+    @Test
+    fun scheduledStart_blocked_whenGameNotInstalled() = runBlocking {
+        val useCase = PrepareTaskStartUseCase(
+            analyzeTaskChainUseCase = analyzeTaskChainUseCase,
+            appAliveChecker = FakeAppAliveChecker(AppAliveStatus.ALIVE),
+            appSettings = appSettings,
+            isPackageInstalled = { false },
+        )
+
+        val result = useCase(
+            chain = listOf(TaskChainNode(name = "领取奖励", enabled = true, config = AwardConfig())),
+            context = TaskStartContext(mode = TaskStartMode.SCHEDULED),
+        )
+
+        assertEquals(
+            TaskStartDecision.Blocked(
+                reason = TaskStartDecisionReason.GAME_NOT_INSTALLED,
+            ),
+            result
+        )
+    }
+
+    @Test
+    fun acknowledgedGameNotInstalled_skipsInstallCheck() = runBlocking {
+        val useCase = PrepareTaskStartUseCase(
+            analyzeTaskChainUseCase = analyzeTaskChainUseCase,
+            appAliveChecker = FakeAppAliveChecker(AppAliveStatus.ALIVE),
+            appSettings = appSettings,
+            isPackageInstalled = { false },
+        )
+
+        val result = useCase(
+            chain = listOf(TaskChainNode(name = "领取奖励", enabled = true, config = AwardConfig())),
+            context = TaskStartContext(
+                mode = TaskStartMode.MANUAL,
+                acknowledgements = setOf(TaskStartAcknowledgement.GAME_NOT_INSTALLED),
+            ),
+        )
+
+        assertTrue(result is TaskStartDecision.Ready)
     }
 
     private class FakeAppAliveChecker(

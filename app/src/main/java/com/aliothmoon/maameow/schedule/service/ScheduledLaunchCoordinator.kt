@@ -113,6 +113,7 @@ class ScheduledLaunchCoordinator(
 
         if (compositionService.state.value == MaaExecutionState.RUNNING
             || compositionService.state.value == MaaExecutionState.STARTING
+            || compositionService.state.value == MaaExecutionState.STOPPING
         ) {
             if (request.forceStart) {
                 triggerLogger.append("强制启动: 停止当前运行任务")

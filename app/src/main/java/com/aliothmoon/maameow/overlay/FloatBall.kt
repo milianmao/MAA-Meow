@@ -37,6 +37,7 @@ fun FloatBall(
 ) {
     val targetColor = when (runningState) {
         MaaExecutionState.RUNNING -> Color(0xFF4CAF50) // 绿色 - 运行中
+        MaaExecutionState.STOPPING -> Color(0xFFFFA726) // 橙色 - 停止中
         MaaExecutionState.ERROR -> Color(0xFFE53935) // 红色 - 错误
         else -> MaterialTheme.colorScheme.primary // IDLE, STARTING 等使用默认主题色
     }

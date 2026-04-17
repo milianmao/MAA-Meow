@@ -130,8 +130,8 @@ class OverlayController(
         if (!_isActive.value) return
 
         val wasActive =
-            previous == MaaExecutionState.RUNNING || previous == MaaExecutionState.STARTING
-        val isActive = current == MaaExecutionState.RUNNING || current == MaaExecutionState.STARTING
+            previous == MaaExecutionState.RUNNING || previous == MaaExecutionState.STARTING || previous == MaaExecutionState.STOPPING
+        val isActive = current == MaaExecutionState.RUNNING || current == MaaExecutionState.STARTING || current == MaaExecutionState.STOPPING
 
         when {
             // 进入运行态：隐藏主面板，显示悬浮控件

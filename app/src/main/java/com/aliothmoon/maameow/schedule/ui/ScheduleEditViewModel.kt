@@ -6,11 +6,15 @@ import android.os.Build
 import android.os.PowerManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.aliothmoon.maameow.R
 import com.aliothmoon.maameow.data.model.TaskProfile
 import com.aliothmoon.maameow.data.preferences.TaskChainState
 import com.aliothmoon.maameow.schedule.data.ScheduleStrategyRepository
 import com.aliothmoon.maameow.schedule.model.ScheduleStrategy
+import com.aliothmoon.maameow.schedule.model.ScheduleType
 import com.aliothmoon.maameow.schedule.service.ScheduleAlarmManager
+import com.aliothmoon.maameow.utils.i18n.UiText
+import com.aliothmoon.maameow.utils.i18n.uiTextOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,8 +30,15 @@ data class ScheduleEditUiState(
     val isNew: Boolean = true,
     val strategyId: String? = null,
     val name: String = "",
+    val scheduleType: ScheduleType = ScheduleType.FIXED_TIME,
+    // FIXED_TIME
     val daysOfWeek: Set<DayOfWeek> = emptySet(),
     val executionTimes: List<LocalTime> = emptyList(),
+    // INTERVAL
+    val startTimeMs: Long? = null,
+    val intervalDays: Int = 0,
+    val intervalHours: Int = 0,
+    // 通用
     val profiles: List<TaskProfile> = emptyList(),
     val selectedProfileId: String? = null,
     val forceStart: Boolean = false,
@@ -35,7 +46,7 @@ data class ScheduleEditUiState(
     val saveSuccess: Boolean = false,
     val needBatteryOptimization: Boolean = false,
     val needExactAlarm: Boolean = false,
-    val errorMessage: String? = null
+    val errorMessage: UiText? = null
 )
 
 class ScheduleEditViewModel(
@@ -65,12 +76,17 @@ class ScheduleEditViewModel(
                 if (strategy != null) {
                     strategyId = id
                     existingStrategy = strategy
+                    val totalMinutes = strategy.intervalMinutes ?: 0
                     _state.value = ScheduleEditUiState(
                         isNew = false,
                         strategyId = id,
                         name = strategy.name,
+                        scheduleType = strategy.scheduleType,
                         daysOfWeek = strategy.daysOfWeek,
                         executionTimes = strategy.executionTimes,
+                        startTimeMs = strategy.startTimeMs,
+                        intervalDays = totalMinutes / (24 * 60),
+                        intervalHours = (totalMinutes % (24 * 60)) / 60,
                         profiles = profiles,
                         selectedProfileId = strategy.profileId,
                         forceStart = strategy.forceStart,
@@ -80,7 +96,10 @@ class ScheduleEditViewModel(
             }
             // 新建策略 — 默认选中当前活跃 Profile
             existingStrategy = null
-            val defaultName = "定时任务-${repository.strategies.value.size + 1}"
+            val defaultName = context.getString(
+                R.string.schedule_default_name,
+                repository.strategies.value.size + 1
+            )
             _state.value = ScheduleEditUiState(
                 name = defaultName,
                 profiles = profiles,
@@ -91,6 +110,22 @@ class ScheduleEditViewModel(
 
     fun onNameChanged(name: String) {
         _state.update { it.copy(name = name) }
+    }
+
+    fun onScheduleTypeChanged(type: ScheduleType) {
+        _state.update { it.copy(scheduleType = type) }
+    }
+
+    fun onStartTimeChanged(epochMs: Long) {
+        _state.update { it.copy(startTimeMs = epochMs) }
+    }
+
+    fun onIntervalDaysChanged(days: Int) {
+        _state.update { it.copy(intervalDays = days.coerceAtLeast(0)) }
+    }
+
+    fun onIntervalHoursChanged(hours: Int) {
+        _state.update { it.copy(intervalHours = hours.coerceIn(0, 23)) }
     }
 
     fun onSelectProfile(profileId: String) {
@@ -146,38 +181,63 @@ class ScheduleEditViewModel(
     fun onSave() {
         val current = _state.value
         if (current.name.isBlank()) {
-            _state.update { it.copy(errorMessage = "请输入策略名称") }
-            return
-        }
-        if (current.daysOfWeek.isEmpty()) {
-            _state.update { it.copy(errorMessage = "请选择执行日期") }
-            return
-        }
-        if (current.executionTimes.isEmpty()) {
-            _state.update { it.copy(errorMessage = "请添加执行时间") }
+            _state.update { it.copy(errorMessage = uiTextOf(R.string.schedule_error_name_required)) }
             return
         }
         if (current.selectedProfileId == null) {
-            _state.update { it.copy(errorMessage = "请选择任务配置") }
+            _state.update { it.copy(errorMessage = uiTextOf(R.string.schedule_error_profile_required)) }
             return
+        }
+        when (current.scheduleType) {
+            ScheduleType.FIXED_TIME -> {
+                if (current.daysOfWeek.isEmpty()) {
+                    _state.update { it.copy(errorMessage = uiTextOf(R.string.schedule_error_days_required)) }
+                    return
+                }
+                if (current.executionTimes.isEmpty()) {
+                    _state.update { it.copy(errorMessage = uiTextOf(R.string.schedule_error_times_required)) }
+                    return
+                }
+            }
+            ScheduleType.INTERVAL -> {
+                if (current.startTimeMs == null) {
+                    _state.update { it.copy(errorMessage = uiTextOf(R.string.schedule_error_start_time_required)) }
+                    return
+                }
+                val totalMinutes = current.intervalDays * 24 * 60 + current.intervalHours * 60
+                if (totalMinutes < 60) {
+                    _state.update { it.copy(errorMessage = uiTextOf(R.string.schedule_error_interval_too_short)) }
+                    return
+                }
+            }
         }
 
         _state.update { it.copy(isSaving = true, errorMessage = null) }
 
         viewModelScope.launch {
             runCatching {
+                val intervalMinutes = if (current.scheduleType == ScheduleType.INTERVAL) {
+                    current.intervalDays * 24 * 60 + current.intervalHours * 60
+                } else null
+
                 val strategy = existingStrategy?.copy(
                     name = current.name.trim(),
+                    scheduleType = current.scheduleType,
                     daysOfWeek = current.daysOfWeek,
                     executionTimes = current.executionTimes,
+                    startTimeMs = current.startTimeMs,
+                    intervalMinutes = intervalMinutes,
                     profileId = current.selectedProfileId,
                     forceStart = current.forceStart,
                 ) ?: ScheduleStrategy(
                     id = strategyId ?: UUID.randomUUID().toString(),
                     name = current.name.trim(),
                     enabled = true,
+                    scheduleType = current.scheduleType,
                     daysOfWeek = current.daysOfWeek,
                     executionTimes = current.executionTimes,
+                    startTimeMs = current.startTimeMs,
+                    intervalMinutes = intervalMinutes,
                     profileId = current.selectedProfileId,
                     forceStart = current.forceStart,
                 )
@@ -207,7 +267,15 @@ class ScheduleEditViewModel(
                     )
                 }
             }.onFailure { e ->
-                _state.update { it.copy(isSaving = false, errorMessage = "保存失败: ${e.message}") }
+                _state.update {
+                    it.copy(
+                        isSaving = false,
+                        errorMessage = uiTextOf(
+                            R.string.schedule_error_save_failed,
+                            e.message ?: ""
+                        )
+                    )
+                }
             }
         }
     }

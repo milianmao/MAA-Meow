@@ -1,8 +1,10 @@
 package com.aliothmoon.maameow.presentation.viewmodel
 
+import android.content.Context
 import android.view.Surface
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.aliothmoon.maameow.R
 import com.aliothmoon.maameow.RemoteService
 import com.aliothmoon.maameow.constant.Packages
 import com.aliothmoon.maameow.data.model.LogItem
@@ -14,6 +16,7 @@ import com.aliothmoon.maameow.domain.service.MaaCompositionService
 import com.aliothmoon.maameow.domain.service.MaaSessionLogger
 import com.aliothmoon.maameow.domain.state.MaaExecutionState
 import com.aliothmoon.maameow.domain.usecase.PrepareTaskStartUseCase
+import com.aliothmoon.maameow.overlay.screensaver.HardwareScreenOffManager
 import com.aliothmoon.maameow.domain.usecase.TaskStartAcknowledgement
 import com.aliothmoon.maameow.domain.usecase.TaskStartContext
 import com.aliothmoon.maameow.domain.usecase.TaskStartDecision
@@ -25,6 +28,8 @@ import com.aliothmoon.maameow.presentation.view.panel.PanelDialogConfirmAction
 import com.aliothmoon.maameow.presentation.view.panel.PanelDialogType
 import com.aliothmoon.maameow.presentation.view.panel.PanelDialogUiState
 import com.aliothmoon.maameow.presentation.view.panel.PanelTab
+import com.aliothmoon.maameow.utils.i18n.UiText
+import com.aliothmoon.maameow.utils.i18n.resolve
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -44,8 +49,10 @@ class BackgroundTaskViewModel(
     private val compositionService: MaaCompositionService,
     private val sessionLogger: MaaSessionLogger,
     private val appSettingsManager: AppSettingsManager,
+    private val hardwareScreenOffManager: HardwareScreenOffManager,
     scheduleRepository: ScheduleStrategyRepository,
     triggerLogger: ScheduleTriggerLogger,
+    private val application: Context,
 ) : ViewModel() {
 
     val coordinator = ScheduledLaunchCoordinator(
@@ -123,6 +130,9 @@ class BackgroundTaskViewModel(
         viewModelScope.launch {
             var prev = compositionService.state.value
             compositionService.state.collect { current ->
+                // 仅在任务自然结束（RUNNING → IDLE/ERROR）时关闭游戏；
+                // 手动停止走 RUNNING → STOPPING → IDLE，prev 为 STOPPING 不会匹配，
+                // 这是预期行为：手动停止说明用户可能还要继续操作，不应自动关闭游戏。
                 if (prev == MaaExecutionState.RUNNING
                     && (current == MaaExecutionState.IDLE || current == MaaExecutionState.ERROR)
                     && appSettingsManager.closeAppOnTaskEnd.value
@@ -164,7 +174,7 @@ class BackgroundTaskViewModel(
             startTasksInternal(
                 request = request,
                 context = TaskStartContext(mode = TaskStartMode.SCHEDULED),
-            )
+            )?.resolve(application)
         }
     }
 
@@ -222,7 +232,7 @@ class BackgroundTaskViewModel(
 
     fun onScreenOff() {
         runCatching {
-            RemoteServiceManager.getInstanceOrNull()?.setDisplayPower(false)
+            hardwareScreenOffManager.activate()
         }.onFailure {
             Timber.e(it, "onScreenOff failed")
         }
@@ -374,7 +384,7 @@ class BackgroundTaskViewModel(
     private suspend fun startTasksInternal(
         request: ScheduledExecutionRequest? = null,
         context: TaskStartContext,
-    ): String? {
+    ): UiText? {
         doSwitchProfile(request)
 
         val plan = when (
@@ -390,36 +400,21 @@ class BackgroundTaskViewModel(
 
             is TaskStartDecision.Blocked -> {
                 pendingStart = null
-                Timber.w("Validation failed: %s", decision.message)
+                val message = application.resolveTaskStartDecisionMessage(decision)
+                Timber.w("Validation failed: %s", message.resolve(application))
                 if (request != null) {
-                    showStartFailedDialog(decision.message)
+                    showStartFailedDialog(message)
                 } else {
-                    showDialog(
-                        PanelDialogUiState(
-                            type = PanelDialogType.WARNING,
-                            title = "提示",
-                            message = decision.message,
-                            confirmText = "知道了",
-                            confirmAction = PanelDialogConfirmAction.DISMISS_ONLY,
-                        )
-                    )
+                    showDialog(application.createStartBlockedDialog(message))
                 }
-                return decision.message
+                return message
             }
 
             is TaskStartDecision.RequiresConfirmation -> {
                 pendingStart = PendingStart(context, request)
-                showDialog(
-                    PanelDialogUiState(
-                        type = PanelDialogType.WARNING,
-                        title = "启动警告",
-                        message = decision.message,
-                        confirmText = "仍然启动",
-                        dismissText = "取消",
-                        confirmAction = PanelDialogConfirmAction.CONFIRM_PENDING_START,
-                    )
-                )
-                return decision.message
+                val message = application.resolveTaskStartDecisionMessage(decision)
+                showDialog(application.createStartWarningDialog(message))
+                return message
             }
         }
 
@@ -429,7 +424,10 @@ class BackgroundTaskViewModel(
         ) {
             if (request != null) {
                 sessionLogger.appendAndWait(
-                    "由定时任务「${request.strategyName}」触发",
+                    application.getString(
+                        R.string.task_start_triggered_by_schedule,
+                        request.strategyName,
+                    ),
                 )
             }
         }
@@ -440,9 +438,9 @@ class BackgroundTaskViewModel(
             chainState.grantGameBatteryExemption(plan.clientType)
         }
 
-        val message = resolveTaskStartFailureMessage(result)
+        val message = application.resolveTaskStartFailureMessage(result)
         if (message != null) {
-            Timber.w("Start failed: $result")
+            Timber.w("Start failed: %s", message.resolve(application))
             if (request != null) {
                 showStartFailedDialog(message)
             }
@@ -487,8 +485,8 @@ class BackgroundTaskViewModel(
         }
     }
 
-    private fun showStartFailedDialog(message: String) {
-        showDialog(createStartFailedDialog(message))
+    private fun showStartFailedDialog(message: UiText) {
+        showDialog(application.createStartFailedDialog(message))
     }
 
     // ==================== Dialog ====================

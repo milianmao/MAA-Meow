@@ -5,6 +5,9 @@ import com.aliothmoon.maameow.data.model.AwardConfig
 import com.aliothmoon.maameow.data.model.FightConfig
 import com.aliothmoon.maameow.data.model.TaskChainNode
 import com.aliothmoon.maameow.data.model.WakeUpConfig
+import com.aliothmoon.maameow.data.preferences.TaskChainState
+import io.mockk.every
+import io.mockk.mockk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -12,7 +15,10 @@ import org.junit.Test
 
 class AnalyzeTaskChainUseCaseTest {
 
-    private val useCase = AnalyzeTaskChainUseCase()
+    private val taskChainState = mockk<TaskChainState> {
+        every { getClientType() } returns "Official"
+    }
+    private val useCase = AnalyzeTaskChainUseCase(taskChainState)
 
     @Test
     fun returnsBlocked_whenNoTaskIsEnabled() {
@@ -22,8 +28,7 @@ class AnalyzeTaskChainUseCaseTest {
 
         assertEquals(
             AnalyzeTaskChainResult.Blocked(
-                reason = AnalyzeTaskChainFailureReason.INVALID_CHAIN,
-                message = "请先选择要执行的任务",
+                reason = AnalyzeTaskChainFailureReason.NO_TASK_SELECTED,
             ),
             result
         )
@@ -50,8 +55,8 @@ class AnalyzeTaskChainUseCaseTest {
 
         assertEquals(
             AnalyzeTaskChainResult.Blocked(
-                reason = AnalyzeTaskChainFailureReason.INVALID_CHAIN,
-                message = "任务链中存在多个不同的客户端类型（Official、Bilibili），请保持一致",
+                reason = AnalyzeTaskChainFailureReason.CONFLICTING_CLIENT_TYPES,
+                clientTypes = listOf("Official", "Bilibili"),
             ),
             result
         )
@@ -85,7 +90,6 @@ class AnalyzeTaskChainUseCaseTest {
         assertEquals(
             AnalyzeTaskChainResult.Blocked(
                 reason = AnalyzeTaskChainFailureReason.NO_EXECUTABLE_TASKS,
-                message = AnalyzeTaskChainUseCase.EMPTY_PARAMS_MESSAGE,
             ),
             result
         )
