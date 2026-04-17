@@ -35,3 +35,4 @@ android/.cxx
 
 # MAA Core download cache
 .maa-cache/
+.worktrees/
