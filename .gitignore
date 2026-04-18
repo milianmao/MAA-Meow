@@ -30,6 +30,14 @@ android/.cxx
 
 # MaaResource
 /app/src/main/assets/MaaSync
+!/app/src/main/assets/MaaSync/
+/app/src/main/assets/MaaSync/*
+!/app/src/main/assets/MaaSync/MaaResource/
+/app/src/main/assets/MaaSync/MaaResource/*
+!/app/src/main/assets/MaaSync/MaaResource/global/
+/app/src/main/assets/MaaSync/MaaResource/global/*
+!/app/src/main/assets/MaaSync/MaaResource/global/epic7/
+!/app/src/main/assets/MaaSync/MaaResource/global/epic7/**
 /app/src/main/jniLibs/*/*.so
 !/app/src/main/jniLibs/*/libjnidispatch.so
 
