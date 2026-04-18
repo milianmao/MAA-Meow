@@ -439,6 +439,28 @@ private fun taskTypeInfoForConfig(config: TaskParamProvider): TaskTypeInfo? {
 }
 
 @Composable
+private fun StartGameConfigPanel(
+    config: StartGame,
+    onConfigChange: (TaskParamProvider) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(PaddingValues(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 4.dp)),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        SelectableChipGroup(
+            label = stringResource(R.string.panel_wakeup_client_type),
+            selectedValue = config.clientType,
+            options = StartGame.CLIENT_TYPES.map { it to StartGame.displayNameOf(it) },
+            onSelected = { onConfigChange(config.copy(clientType = it)) },
+            labelFontWeight = FontWeight.Medium
+        )
+    }
+}
+
+@Composable
 private fun taskTypeLabel(typeInfo: TaskTypeInfo): String {
     return when (typeInfo) {
         TaskTypeInfo.WAKE_UP -> stringResource(R.string.panel_task_type_wake_up)
