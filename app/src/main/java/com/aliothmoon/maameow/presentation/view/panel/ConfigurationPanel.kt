@@ -58,6 +58,7 @@ import com.aliothmoon.maameow.data.model.MallConfig
 import com.aliothmoon.maameow.data.model.ReclamationConfig
 import com.aliothmoon.maameow.data.model.RecruitConfig
 import com.aliothmoon.maameow.data.model.RoguelikeConfig
+import com.aliothmoon.maameow.data.model.StartGame
 import com.aliothmoon.maameow.data.model.TaskChainNode
 import com.aliothmoon.maameow.data.model.TaskParamProvider
 import com.aliothmoon.maameow.data.model.TaskProfile
@@ -85,6 +86,7 @@ fun TaskConfigPanel(
     onDuplicateProfile: (String) -> Unit,
     onDeleteProfile: (String) -> Unit,
     onCreateProfile: () -> Unit,
+    availableTaskTypes: List<TaskTypeInfo> = TaskTypeInfo.entries,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier) {
@@ -103,7 +105,10 @@ fun TaskConfigPanel(
             }
             // 编辑模式：正在新增任务
             isEditMode && isAddingTask -> {
-                TaskGalleryView(onAddNode = onAddNode)
+                TaskGalleryView(
+                    onAddNode = onAddNode,
+                    availableTaskTypes = availableTaskTypes
+                )
             }
 
             // 编辑模式：已选中任务
@@ -169,6 +174,12 @@ fun TaskConfigPanel(
                         is ReclamationConfig -> ReclamationConfigPanel(
                             config = cfg,
                             onConfigChange = onConfigChange
+                        )
+
+                        is StartGame -> EmptyStateHint(
+                            title = stringResource(R.string.panel_config_empty_view_title),
+                            descriptions = listOf(stringResource(R.string.panel_config_empty_view_desc)),
+                            showReorderHint = false
                         )
                     }
                 }
@@ -243,7 +254,10 @@ private fun HintItem(icon: androidx.compose.ui.graphics.vector.ImageVector, text
 }
 
 @Composable
-private fun TaskGalleryView(onAddNode: (TaskTypeInfo) -> Unit) {
+private fun TaskGalleryView(
+    onAddNode: (TaskTypeInfo) -> Unit,
+    availableTaskTypes: List<TaskTypeInfo>
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -262,7 +276,7 @@ private fun TaskGalleryView(onAddNode: (TaskTypeInfo) -> Unit) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(bottom = 12.dp)
         ) {
-            items(TaskTypeInfo.entries) { typeInfo ->
+            items(availableTaskTypes) { typeInfo ->
                 Surface(
                     shape = RoundedCornerShape(8.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
@@ -383,6 +397,14 @@ private fun TaskManagementView(
     }
 }
 
+internal fun availableTaskTypesForTab(tab: PanelTab): List<TaskTypeInfo> {
+    return if (tab == PanelTab.EPIC7) {
+        listOf(TaskTypeInfo.EPIC7_START_GAME)
+    } else {
+        TaskTypeInfo.normalTaskTypes
+    }
+}
+
 private fun taskTypeInfoForConfig(config: TaskParamProvider): TaskTypeInfo? {
     return TaskTypeInfo.entries.firstOrNull { it.defaultConfig()::class == config::class }
 }
@@ -398,5 +420,6 @@ private fun taskTypeLabel(typeInfo: TaskTypeInfo): String {
         TaskTypeInfo.MISSION -> stringResource(R.string.panel_task_type_mission)
         TaskTypeInfo.AUTO_ROGUELIKE -> stringResource(R.string.panel_task_type_auto_roguelike)
         TaskTypeInfo.RECLAMATION -> stringResource(R.string.panel_task_type_reclamation)
+        TaskTypeInfo.EPIC7_START_GAME -> stringResource(R.string.panel_task_type_epic7_start_game)
     }
 }

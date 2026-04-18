@@ -30,6 +30,7 @@ import com.aliothmoon.maameow.presentation.view.panel.PanelDialogUiState
 import com.aliothmoon.maameow.presentation.view.panel.PanelTab
 import com.aliothmoon.maameow.utils.i18n.UiText
 import com.aliothmoon.maameow.utils.i18n.resolve
+import com.aliothmoon.maameow.utils.i18n.uiTextOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -386,6 +387,37 @@ class BackgroundTaskViewModel(
         context: TaskStartContext,
     ): UiText? {
         doSwitchProfile(request)
+
+        if (request == null && state.value.current == PanelTab.EPIC7) {
+            val params = buildEpic7Params(chainState.chain.value)
+            if (params.isEmpty()) {
+                val message = uiTextOf(R.string.task_start_error_no_task_selected)
+                Timber.w("Validation failed: %s", message.resolve(application))
+                showDialog(application.createStartBlockedDialog(message))
+                return message
+            }
+
+            val clientType = chainState.getClientTypeOrNull() ?: "epic7"
+            val result = compositionService.start(
+                tasks = params,
+                clientType = clientType,
+            )
+
+            if (result is MaaCompositionService.StartResult.Success
+                && appSettingsManager.muteOnGameLaunch.value
+            ) {
+                onMuteGameSound(clientType)
+                chainState.grantGameBatteryExemption(clientType)
+            }
+
+            val message = application.resolveTaskStartFailureMessage(result)
+            if (message != null) {
+                Timber.w("Start failed: %s", message.resolve(application))
+                showStartFailedDialog(message)
+                return message
+            }
+            return null
+        }
 
         val plan = when (
             val decision = prepareTaskStart(

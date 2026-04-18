@@ -231,7 +231,7 @@ class CopilotViewModel(
 
             for ((fileName, json) in files) {
                 val data = copilotManager.parseJson(json).getOrElse { e ->
-                    Timber.w(e, "$TAG: 解析本地文件失败: $fileName")
+                    Timber.w(e, "$TAG: failed to parse local file: $fileName")
                     continue
                 }
                 val filePath = repository.saveCopilotJsonByName(fileName, json)

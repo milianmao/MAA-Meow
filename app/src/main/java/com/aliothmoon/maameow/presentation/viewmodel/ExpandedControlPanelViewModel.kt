@@ -4,18 +4,23 @@ import android.content.Context
 import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.aliothmoon.maameow.R
 import com.aliothmoon.maameow.data.model.LogItem
+import com.aliothmoon.maameow.data.model.StartGame
+import com.aliothmoon.maameow.data.model.TaskChainNode
+import com.aliothmoon.maameow.data.model.TaskParamProvider
 import com.aliothmoon.maameow.data.model.TaskTypeInfo
 import com.aliothmoon.maameow.data.preferences.TaskChainState
 import com.aliothmoon.maameow.domain.service.MaaCompositionService
 import com.aliothmoon.maameow.domain.service.MaaSessionLogger
 import com.aliothmoon.maameow.domain.state.MaaExecutionState
-import com.aliothmoon.maameow.data.model.TaskParamProvider
 import com.aliothmoon.maameow.domain.usecase.PrepareTaskStartUseCase
 import com.aliothmoon.maameow.domain.usecase.TaskStartAcknowledgement
 import com.aliothmoon.maameow.domain.usecase.TaskStartContext
 import com.aliothmoon.maameow.domain.usecase.TaskStartDecision
 import com.aliothmoon.maameow.domain.usecase.TaskStartMode
+import com.aliothmoon.maameow.maa.task.MaaTaskParams
+import com.aliothmoon.maameow.maa.task.MaaTaskType
 import com.aliothmoon.maameow.overlay.OverlayController
 import com.aliothmoon.maameow.presentation.view.panel.FloatingPanelState
 import com.aliothmoon.maameow.presentation.view.panel.PanelDialogConfirmAction
@@ -23,6 +28,7 @@ import com.aliothmoon.maameow.presentation.view.panel.PanelDialogType
 import com.aliothmoon.maameow.presentation.view.panel.PanelDialogUiState
 import com.aliothmoon.maameow.presentation.view.panel.PanelTab
 import com.aliothmoon.maameow.utils.i18n.resolve
+import com.aliothmoon.maameow.utils.i18n.uiTextOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -222,6 +228,44 @@ class ExpandedControlPanelViewModel(
 
     private fun launchManualStart(context: TaskStartContext) {
         viewModelScope.launch {
+            if (state.value.currentTab == PanelTab.EPIC7) {
+                val params = buildEpic7Params(chainState.chain.value)
+                if (params.isEmpty()) {
+                    val message = uiTextOf(R.string.task_start_error_no_task_selected)
+                    Timber.w("Validation failed: %s", message.resolve(application))
+                    showDialog(application.createStartBlockedDialog(message))
+                    return@launch
+                }
+
+                Timber.i("=== Task JSON List (%d tasks) ===", params.size)
+                params.forEachIndexed { index, taskParams ->
+                    Timber.i("[%d] Type: %s", index, taskParams.type.value)
+                    Timber.i("    Params: %s", taskParams.params)
+                }
+                Timber.i("=== End Task JSON List ===")
+
+                val clientType = chainState.getClientTypeOrNull() ?: "epic7"
+                chainState.grantGameBatteryExemption(clientType)
+                val result = compositionService.start(
+                    tasks = params,
+                    clientType = clientType,
+                )
+                val message = application.formatStartResult(result)
+                if (result is MaaCompositionService.StartResult.Success) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(
+                            application,
+                            message.resolve(application),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                } else {
+                    Timber.w("Start failed: %s", message.resolve(application))
+                    showDialog(application.createStartFailedDialog(message))
+                }
+                return@launch
+            }
+
             val plan = when (
                 val decision = prepareTaskStart(
                     chain = chainState.chain.value,
@@ -281,4 +325,11 @@ class ExpandedControlPanelViewModel(
             }
         }
     }
+}
+
+internal fun buildEpic7Params(chain: List<TaskChainNode>): List<MaaTaskParams> {
+    return chain
+        .filter { it.enabled && it.config is StartGame }
+        .map { it.config.toTaskParams() }
+        .filter { it.type == MaaTaskType.CUSTOM }
 }

@@ -31,6 +31,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aliothmoon.maameow.R
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.aliothmoon.maameow.data.model.StartGame
+import com.aliothmoon.maameow.data.model.TaskChainNode
 import com.aliothmoon.maameow.data.preferences.AppSettingsManager
 import com.aliothmoon.maameow.domain.models.RunMode
 import com.aliothmoon.maameow.domain.service.MaaCompositionService
@@ -46,6 +48,20 @@ import com.aliothmoon.maameow.presentation.viewmodel.ToolboxViewModel
 import com.aliothmoon.maameow.utils.i18n.asString
 import org.koin.compose.koinInject
 
+
+internal fun panelTabForPage(page: Int): PanelTab = PanelTab.entries[page]
+
+internal fun pageForPanelTab(tab: PanelTab): Int = PanelTab.entries.indexOf(tab)
+
+internal fun isEpic7StartGameNode(node: TaskChainNode): Boolean = node.config is StartGame
+
+internal fun filterNodesForTab(tab: PanelTab, nodes: List<TaskChainNode>): List<TaskChainNode> {
+    return when (tab) {
+        PanelTab.EPIC7 -> nodes.filter(::isEpic7StartGameNode)
+        PanelTab.TASKS -> nodes.filterNot(::isEpic7StartGameNode)
+        else -> nodes
+    }
+}
 
 @Composable
 fun ExpandedControlPanel(
@@ -67,17 +83,16 @@ fun ExpandedControlPanel(
     val nodes by viewModel.chainState.chain.collectAsStateWithLifecycle()
     val profiles by viewModel.chainState.profiles.collectAsStateWithLifecycle()
     val activeProfileId by viewModel.chainState.activeProfileId.collectAsStateWithLifecycle()
-    val selectedNode = nodes.find { it.id == uiState.selectedNodeId }
     val focusManager = LocalFocusManager.current
 
     val pagerState = rememberPagerState(
-        initialPage = uiState.currentTab.ordinal,
+        initialPage = pageForPanelTab(uiState.currentTab),
         pageCount = { PanelTab.entries.size }
     )
 
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.settledPage }.collect { page ->
-            val newTab = PanelTab.entries[page]
+            val newTab = panelTabForPage(page)
             if (newTab != uiState.currentTab) {
                 viewModel.onTabChange(newTab)
             }
@@ -85,8 +100,9 @@ fun ExpandedControlPanel(
     }
 
     LaunchedEffect(uiState.currentTab) {
-        if (pagerState.currentPage != uiState.currentTab.ordinal) {
-            pagerState.scrollToPage(uiState.currentTab.ordinal)
+        val targetPage = pageForPanelTab(uiState.currentTab)
+        if (pagerState.currentPage != targetPage) {
+            pagerState.scrollToPage(targetPage)
         }
     }
 
@@ -126,22 +142,36 @@ fun ExpandedControlPanel(
                     userScrollEnabled = false,
                     beyondViewportPageCount = 1
                 ) { page ->
-                    when (page) {
-                        0 -> { // PanelTab.ONE_KEY_TASKS
+                    val pageTab = panelTabForPage(page)
+                    val displayedNodes = filterNodesForTab(pageTab, nodes)
+                    val selectedNode = displayedNodes.find { it.id == uiState.selectedNodeId }
+                    when (pageTab) {
+                        PanelTab.TASKS,
+                        PanelTab.EPIC7 -> {
                             Row(
                                 modifier = Modifier
                                     .fillMaxSize()
                             ) {
                                 // 左侧任务列表
                                 TaskListPanel(
-                                    nodes = nodes,
-                                    selectedNodeId = uiState.selectedNodeId,
+                                    nodes = displayedNodes,
+                                    selectedNodeId = selectedNode?.id,
                                     isEditMode = uiState.isEditMode,
                                     isAddingTask = uiState.isAddingTask,
                                     isProfileMode = uiState.isProfileMode,
                                     onNodeEnabledChange = viewModel::onNodeEnabledChange,
                                     onNodeSelected = viewModel::onNodeSelected,
-                                    onNodeMove = viewModel::onNodeMove,
+                                    onNodeMove = { fromIndex, toIndex ->
+                                        val movingNodeId = displayedNodes.getOrNull(fromIndex)?.id
+                                        val targetNodeId = displayedNodes.getOrNull(toIndex)?.id
+                                        if (movingNodeId == null || targetNodeId == null) return@TaskListPanel
+
+                                        val globalFrom = nodes.indexOfFirst { it.id == movingNodeId }
+                                        val globalTo = nodes.indexOfFirst { it.id == targetNodeId }
+                                        if (globalFrom >= 0 && globalTo >= 0) {
+                                            viewModel.onNodeMove(globalFrom, globalTo)
+                                        }
+                                    },
                                     onToggleEditMode = viewModel::onToggleEditMode,
                                     onToggleAddingTask = viewModel::onToggleAddingTask,
                                     onToggleProfileMode = viewModel::onToggleProfileMode,
@@ -150,6 +180,7 @@ fun ExpandedControlPanel(
                                 )
 
                                 // 右侧配置区域
+                                val availableTaskTypes = availableTaskTypesForTab(pageTab)
                                 TaskConfigPanel(
                                     selectedNode = selectedNode,
                                     isEditMode = uiState.isEditMode,
@@ -169,6 +200,7 @@ fun ExpandedControlPanel(
                                     onDuplicateProfile = viewModel::onDuplicateProfile,
                                     onDeleteProfile = viewModel::onDeleteProfile,
                                     onCreateProfile = viewModel::onCreateProfile,
+                                    availableTaskTypes = availableTaskTypes,
                                     modifier = Modifier
                                         .weight(1f)
                                         .fillMaxHeight()
@@ -176,15 +208,15 @@ fun ExpandedControlPanel(
                             }
                         }
 
-                        1 -> { // PanelTab.AUTO_BATTLE
+                        PanelTab.AUTO_BATTLE -> {
                             AutoBattlePanel(modifier = Modifier.fillMaxSize())
                         }
 
-                        2 -> { // PanelTab.TOOLS
+                        PanelTab.TOOLS -> {
                             ToolboxPanel(modifier = Modifier.fillMaxSize())
                         }
 
-                        3 -> { // PanelTab.LOG
+                        PanelTab.LOG -> {
                             val runtimeLogs by viewModel.runtimeLogs.collectAsStateWithLifecycle()
                             LogPanel(
                                 logs = runtimeLogs,
@@ -195,7 +227,7 @@ fun ExpandedControlPanel(
                     }
                 }
 
-                if (uiState.currentTab == PanelTab.TASKS || uiState.currentTab == PanelTab.AUTO_BATTLE || uiState.currentTab == PanelTab.TOOLS) {
+                if (PanelTab.canShowTaskActions(uiState.currentTab)) {
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 6.dp),
                         thickness = 1.dp,

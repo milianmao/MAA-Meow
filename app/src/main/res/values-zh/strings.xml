@@ -550,6 +550,7 @@
     <string name="panel_task_type_mission">领取奖励</string>
     <string name="panel_task_type_auto_roguelike">自动肉鸽</string>
     <string name="panel_task_type_reclamation">生息演算</string>
+    <string name="panel_task_type_epic7_start_game">第七史诗启动</string>
 
     <!-- panel: profile -->
     <string name="panel_profile_title">配置管理</string>
@@ -754,6 +755,7 @@
     <string name="panel_tab_auto_battle">自动战斗</string>
     <string name="panel_tab_tools">小工具</string>
     <string name="panel_tab_log">日志</string>
+    <string name="panel_tab_epic7">第七史诗</string>
     <string name="panel_cd_go_home">回到主界面</string>
     <string name="toolbox_tab_mini_game">小游戏</string>
     <string name="toolbox_tab_recruit_calc">公招识别</string>

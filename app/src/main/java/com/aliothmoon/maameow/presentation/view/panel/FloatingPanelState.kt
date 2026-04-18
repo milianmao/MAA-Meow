@@ -10,7 +10,7 @@ import com.aliothmoon.maameow.utils.i18n.UiText
  */
 enum class PanelTab(@param:StringRes val labelRes: Int) {
     TASKS(R.string.panel_tab_tasks),
-    EPIC7("第七史诗"),
+    EPIC7(R.string.panel_tab_epic7),
     AUTO_BATTLE(R.string.panel_tab_auto_battle),
     TOOLS(R.string.panel_tab_tools),
     LOG(R.string.panel_tab_log);

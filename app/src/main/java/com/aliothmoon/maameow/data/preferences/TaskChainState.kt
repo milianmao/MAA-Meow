@@ -401,7 +401,7 @@ class TaskChainState(
     }
 
     private fun buildDefaultChain(): List<TaskChainNode> {
-        return TaskTypeInfo.entries.mapIndexed { index, info ->
+        return TaskTypeInfo.normalTaskTypes.mapIndexed { index, info ->
             TaskChainNode(
                 name = defaultTaskName(info),
                 enabled = false,

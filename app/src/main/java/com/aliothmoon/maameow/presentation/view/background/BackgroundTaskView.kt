@@ -100,6 +100,10 @@ import com.aliothmoon.maameow.presentation.view.panel.PanelTab
 import com.aliothmoon.maameow.presentation.view.panel.TaskConfigPanel
 import com.aliothmoon.maameow.presentation.view.panel.TaskListPanel
 import com.aliothmoon.maameow.presentation.view.panel.AutoBattlePanel
+import com.aliothmoon.maameow.presentation.view.panel.availableTaskTypesForTab
+import com.aliothmoon.maameow.presentation.view.panel.filterNodesForTab
+import com.aliothmoon.maameow.presentation.view.panel.panelTabForPage
+import com.aliothmoon.maameow.presentation.view.panel.pageForPanelTab
 import com.aliothmoon.maameow.presentation.viewmodel.BackgroundTaskViewModel
 import com.aliothmoon.maameow.utils.i18n.remoteBackendPermissionLabel
 import com.aliothmoon.maameow.presentation.viewmodel.CopilotViewModel
@@ -161,17 +165,16 @@ fun BackgroundTaskView(
     val nodes by viewModel.chainState.chain.collectAsStateWithLifecycle()
     val profiles by viewModel.chainState.profiles.collectAsStateWithLifecycle()
     val activeProfileId by viewModel.chainState.activeProfileId.collectAsStateWithLifecycle()
-    val selectedNode = nodes.find { it.id == state.selectedNodeId }
     val canShowTaskActions = PanelTab.canShowTaskActions(state.current)
 
     val pagerState = rememberPagerState(
-        initialPage = state.current.ordinal,
+        initialPage = pageForPanelTab(state.current),
         pageCount = { PanelTab.entries.size }
     )
 
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.settledPage }.collect { page ->
-            val newTab = PanelTab.entries[page]
+            val newTab = panelTabForPage(page)
             if (newTab != state.current) {
                 viewModel.onTabChange(newTab)
             }
@@ -179,8 +182,9 @@ fun BackgroundTaskView(
     }
 
     LaunchedEffect(state.current) {
-        if (pagerState.currentPage != state.current.ordinal) {
-            pagerState.scrollToPage(state.current.ordinal)
+        val targetPage = pageForPanelTab(state.current)
+        if (pagerState.currentPage != targetPage) {
+            pagerState.scrollToPage(targetPage)
         }
     }
     val context = LocalContext.current
@@ -386,18 +390,32 @@ fun BackgroundTaskView(
                                 userScrollEnabled = true,
                                 beyondViewportPageCount = 0
                             ) { page ->
-                                when (page) {
-                                    0 -> {
+                                val pageTab = panelTabForPage(page)
+                                val displayedNodes = filterNodesForTab(pageTab, nodes)
+                                val selectedNode = displayedNodes.find { it.id == state.selectedNodeId }
+                                when (pageTab) {
+                                    PanelTab.TASKS,
+                                    PanelTab.EPIC7 -> {
                                         Row(modifier = Modifier.fillMaxSize()) {
                                             TaskListPanel(
-                                                nodes = nodes,
-                                                selectedNodeId = state.selectedNodeId,
+                                                nodes = displayedNodes,
+                                                selectedNodeId = selectedNode?.id,
                                                 isEditMode = state.isEditMode,
                                                 isAddingTask = state.isAddingTask,
                                                 isProfileMode = state.isProfileMode,
                                                 onNodeEnabledChange = viewModel::onNodeEnabledChange,
                                                 onNodeSelected = viewModel::onNodeSelected,
-                                                onNodeMove = viewModel::onNodeMove,
+                                                onNodeMove = { fromIndex, toIndex ->
+                                                    val movingNodeId = displayedNodes.getOrNull(fromIndex)?.id
+                                                    val targetNodeId = displayedNodes.getOrNull(toIndex)?.id
+                                                    if (movingNodeId == null || targetNodeId == null) return@TaskListPanel
+
+                                                    val globalFrom = nodes.indexOfFirst { it.id == movingNodeId }
+                                                    val globalTo = nodes.indexOfFirst { it.id == targetNodeId }
+                                                    if (globalFrom >= 0 && globalTo >= 0) {
+                                                        viewModel.onNodeMove(globalFrom, globalTo)
+                                                    }
+                                                },
                                                 onToggleEditMode = viewModel::onToggleEditMode,
                                                 onToggleAddingTask = viewModel::onToggleAddingTask,
                                                 onToggleProfileMode = viewModel::onToggleProfileMode,
@@ -460,16 +478,17 @@ fun BackgroundTaskView(
                                                                 it
                                                             )
                                                         },
-                                                        onCreateProfile = { viewModel.onCreateProfile() }
+                                                        onCreateProfile = { viewModel.onCreateProfile() },
+                                                        availableTaskTypes = availableTaskTypesForTab(pageTab)
                                                     )
                                                 }
                                             }
                                         }
                                     }
 
-                                    1 -> AutoBattlePanel(modifier = Modifier.fillMaxSize())
-                                    2 -> ToolboxPanel(modifier = Modifier.fillMaxSize())
-                                    3 -> {
+                                    PanelTab.AUTO_BATTLE -> AutoBattlePanel(modifier = Modifier.fillMaxSize())
+                                    PanelTab.TOOLS -> ToolboxPanel(modifier = Modifier.fillMaxSize())
+                                    PanelTab.LOG -> {
                                         val runtimeLogs by viewModel.logs.collectAsStateWithLifecycle()
                                         LogPanel(
                                             logs = runtimeLogs,
@@ -491,7 +510,8 @@ fun BackgroundTaskView(
                                         onClick = {
                                             focusManager.clearFocus()
                                             when (state.current) {
-                                                PanelTab.TASKS -> viewModel.onStartTasks()
+                                                PanelTab.TASKS,
+                                                PanelTab.EPIC7 -> viewModel.onStartTasks()
                                                 PanelTab.AUTO_BATTLE -> copilotViewModel.onStart()
                                                 PanelTab.TOOLS -> toolboxViewModel.onStart()
                                                 else -> {}
@@ -515,7 +535,8 @@ fun BackgroundTaskView(
                                     OutlinedButton(
                                         onClick = {
                                             when (state.current) {
-                                                PanelTab.TASKS -> viewModel.onStopTasks()
+                                                PanelTab.TASKS,
+                                                PanelTab.EPIC7 -> viewModel.onStopTasks()
                                                 PanelTab.AUTO_BATTLE -> copilotViewModel.onStop()
                                                 PanelTab.TOOLS -> toolboxViewModel.onStop()
                                                 else -> {}

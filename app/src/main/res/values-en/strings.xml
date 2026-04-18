@@ -501,6 +501,7 @@
     <string name="panel_task_type_mission">Claim Rewards</string>
     <string name="panel_task_type_auto_roguelike">Auto I.S.</string>
     <string name="panel_task_type_reclamation">Reclamation Algorithm</string>
+    <string name="panel_task_type_epic7_start_game">Epic Seven Startup</string>
 
     <!-- panel: profile -->
     <string name="panel_profile_title">Profile Management</string>
@@ -705,6 +706,7 @@
     <string name="panel_tab_auto_battle">Auto Battle</string>
     <string name="panel_tab_tools">Tools</string>
     <string name="panel_tab_log">Logs</string>
+    <string name="panel_tab_epic7">Epic Seven</string>
     <string name="panel_cd_go_home">Go to home screen</string>
     <string name="toolbox_tab_mini_game">Mini Games</string>
     <string name="toolbox_tab_recruit_calc">Recruit Calc</string>
