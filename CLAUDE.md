@@ -23,6 +23,12 @@ MAA-Meow 是一款在 Android 设备上原生运行 **MAA (MaaAssistantArknights
 ## 开发工作流
 - **环境初始化**: 运行 `python scripts/setup_maa_core.py` 下载原生库 (`.so`) 和资源文件 (`MaaSync`)。
 - **构建**: 使用 JDK 21 和 Android Studio。
+
+## 固定环境路径
+- **JDK 路径**: `D:\tool\JDK21`
+- **Android SDK 路径**: `D:\tool\SDK`
+- **执行规则**: 运行 Gradle、Android 构建、测试、Lint、SDK 相关命令时，优先使用上述固定路径，不要自行探测或猜测系统中的 JDK / SDK 路径。
+
 - **代码规范**: 
   - **提交信息**: 遵循 [Conventional Commits](https://www.conventionalcommits.org/) (例如: `feat:`, `fix:`, `docs:`, `chore:`)。
   - **文档**: 使用 KDoc 对公共方法和复杂逻辑进行注释。

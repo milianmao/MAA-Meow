@@ -13,6 +13,7 @@ import com.aliothmoon.maameow.data.model.TaskParamProvider
 import com.aliothmoon.maameow.data.preferences.AppSettingsManager
 import com.aliothmoon.maameow.data.preferences.TaskChainState
 import com.aliothmoon.maameow.domain.service.MaaCompositionService
+import com.aliothmoon.maameow.domain.service.MaaResourceLoader
 import com.aliothmoon.maameow.domain.service.MaaSessionLogger
 import com.aliothmoon.maameow.domain.state.MaaExecutionState
 import com.aliothmoon.maameow.domain.usecase.PrepareTaskStartUseCase
@@ -48,6 +49,7 @@ class BackgroundTaskViewModel(
     val chainState: TaskChainState,
     private val prepareTaskStart: PrepareTaskStartUseCase,
     private val compositionService: MaaCompositionService,
+    private val resourceLoader: MaaResourceLoader,
     private val sessionLogger: MaaSessionLogger,
     private val appSettingsManager: AppSettingsManager,
     private val hardwareScreenOffManager: HardwareScreenOffManager,
@@ -359,6 +361,14 @@ class BackgroundTaskViewModel(
 
     fun onTabChange(tab: PanelTab) {
         _state.update { it.copy(current = tab) }
+
+        val targetClientType = resolveResourceClientTypeForTab(
+            targetTab = tab,
+            defaultClientType = chainState.getClientType()
+        )
+        viewModelScope.launch {
+            resourceLoader.load(targetClientType)
+        }
     }
 
     // ==================== Task Execution ====================
@@ -580,4 +590,11 @@ class BackgroundTaskViewModel(
         touchPreviewController.onClear()
         super.onCleared()
     }
+}
+
+internal fun resolveResourceClientTypeForTab(
+    targetTab: PanelTab,
+    defaultClientType: String,
+): String {
+    return if (targetTab == PanelTab.EPIC7) "epic7" else defaultClientType
 }
