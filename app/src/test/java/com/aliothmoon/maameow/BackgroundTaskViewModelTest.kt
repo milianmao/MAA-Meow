@@ -2,6 +2,8 @@ package com.aliothmoon.maameow
 
 import android.content.Context
 import com.aliothmoon.maameow.data.model.LogItem
+import com.aliothmoon.maameow.data.model.StartGame
+import com.aliothmoon.maameow.data.model.TaskChainNode
 import com.aliothmoon.maameow.data.preferences.AppSettingsManager
 import com.aliothmoon.maameow.data.preferences.TaskChainState
 import com.aliothmoon.maameow.domain.service.MaaCompositionService
@@ -18,12 +20,20 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TestWatcher
+import org.junit.runner.Description
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class BackgroundTaskViewModelTest {
@@ -31,8 +41,12 @@ class BackgroundTaskViewModelTest {
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
 
+    private val resourceLoader = mockk<MaaResourceLoader> {
+        coEvery { load(any()) } returns Result.success(Unit)
+    }
+
     @Test
-    fun onTabChange_toEpic7_loadsEpic7Resources() = runTest {
+    fun onTabChange_toEpic7_loadsEpic7Resources() = runTest(mainDispatcherRule.dispatcher) {
         val viewModel = createViewModel(defaultClientType = "Official")
 
         viewModel.onTabChange(PanelTab.EPIC7)
@@ -42,7 +56,7 @@ class BackgroundTaskViewModelTest {
     }
 
     @Test
-    fun onTabChange_fromEpic7ToTasks_restoresDefaultResources() = runTest {
+    fun onTabChange_fromEpic7ToTasks_restoresDefaultResources() = runTest(mainDispatcherRule.dispatcher) {
         val viewModel = createViewModel(defaultClientType = "Official")
 
         viewModel.onTabChange(PanelTab.EPIC7)
@@ -52,22 +66,105 @@ class BackgroundTaskViewModelTest {
         coVerify(exactly = 1) { resourceLoader.load("Official") }
     }
 
-    private val resourceLoader = mockk<MaaResourceLoader> {
-        coEvery { load(any()) } returns Result.success(Unit)
+    @Test
+    fun onStartTasks_inEpic7_usesEnabledStartGameClientType() = runTest(mainDispatcherRule.dispatcher) {
+        val compositionService = mockk<MaaCompositionService> {
+            every { state } returns MutableStateFlow(MaaExecutionState.IDLE)
+            coEvery {
+                start(
+                    tasks = any(),
+                    clientType = any(),
+                )
+            } returns MaaCompositionService.StartResult.Success("1.0")
+        }
+        val chainState = createEpic7ChainState(
+            startGame = StartGame(clientType = "com.stove.epic7.google"),
+        )
+        val viewModel = createViewModel(
+            defaultClientType = "Official",
+            chainState = chainState,
+            compositionService = compositionService,
+        )
+
+        viewModel.onTabChange(PanelTab.EPIC7)
+        viewModel.onStartTasks()
+        advanceUntilIdle()
+
+        coVerify {
+            compositionService.start(
+                tasks = any(),
+                clientType = "com.stove.epic7.google",
+            )
+        }
+        verify { chainState.grantGameBatteryExemption("com.stove.epic7.google") }
     }
 
-    private fun createViewModel(defaultClientType: String): BackgroundTaskViewModel {
-        val chainState = mockk<TaskChainState> {
+    @Test
+    fun onStartTasks_inEpic7_fallsBackToDefaultStartGameClient() = runTest(mainDispatcherRule.dispatcher) {
+        val compositionService = mockk<MaaCompositionService> {
+            every { state } returns MutableStateFlow(MaaExecutionState.IDLE)
+            coEvery {
+                start(
+                    tasks = any(),
+                    clientType = any(),
+                )
+            } returns MaaCompositionService.StartResult.Success("1.0")
+        }
+        val chainState = createEpic7ChainState(startGame = StartGame())
+        val viewModel = createViewModel(
+            defaultClientType = "Official",
+            chainState = chainState,
+            compositionService = compositionService,
+        )
+
+        viewModel.onTabChange(PanelTab.EPIC7)
+        viewModel.onStartTasks()
+        advanceUntilIdle()
+
+        coVerify {
+            compositionService.start(
+                tasks = any(),
+                clientType = StartGame.DEFAULT_CLIENT_TYPE,
+            )
+        }
+    }
+
+    private fun createEpic7ChainState(startGame: StartGame): TaskChainState = mockk {
+        every { getClientType() } returns "Official"
+        every { getClientTypeOrNull() } returns "Official"
+        every {
+            chain
+        } returns MutableStateFlow(
+            listOf(
+                TaskChainNode(
+                    id = "epic7-start",
+                    name = "Start Game",
+                    enabled = true,
+                    config = startGame,
+                ),
+            ),
+        )
+        every { activeProfileId } returns MutableStateFlow("")
+        every { profiles } returns MutableStateFlow(emptyList())
+        every { isLoaded } returns MutableStateFlow(true)
+        every { grantGameBatteryExemption(any()) } returns Unit
+    }
+
+    private fun createViewModel(
+        defaultClientType: String,
+        chainState: TaskChainState = mockk {
             every { getClientType() } returns defaultClientType
             every { getClientTypeOrNull() } returns defaultClientType
             every { chain } returns MutableStateFlow(emptyList())
             every { activeProfileId } returns MutableStateFlow("")
             every { profiles } returns MutableStateFlow(emptyList())
             every { isLoaded } returns MutableStateFlow(true)
-        }
-        val compositionService = mockk<MaaCompositionService> {
+            every { grantGameBatteryExemption(any()) } returns Unit
+        },
+        compositionService: MaaCompositionService = mockk {
             every { state } returns MutableStateFlow(MaaExecutionState.IDLE)
-        }
+        },
+    ): BackgroundTaskViewModel {
         val sessionLogger = mockk<MaaSessionLogger> {
             every { logs } returns MutableStateFlow<List<LogItem>>(emptyList())
             every { clearRuntimeLogs() } returns Unit
@@ -75,7 +172,7 @@ class BackgroundTaskViewModelTest {
         val appSettingsManager = mockk<AppSettingsManager> {
             every { showTouchPreview } returns MutableStateFlow(false)
             every { closeAppOnTaskEnd } returns MutableStateFlow(false)
-            every { muteOnGameLaunch } returns MutableStateFlow(false)
+            every { muteOnGameLaunch } returns MutableStateFlow(true)
         }
         val scheduleRepository = mockk<ScheduleStrategyRepository>(relaxed = true)
         val triggerLogger = mockk<ScheduleTriggerLogger>(relaxed = true)
@@ -95,5 +192,18 @@ class BackgroundTaskViewModelTest {
             triggerLogger = triggerLogger,
             application = application,
         )
+    }
+}
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class MainDispatcherRule(
+    val dispatcher: TestDispatcher = StandardTestDispatcher(),
+) : TestWatcher() {
+    override fun starting(description: Description) {
+        Dispatchers.setMain(dispatcher)
+    }
+
+    override fun finished(description: Description) {
+        Dispatchers.resetMain()
     }
 }

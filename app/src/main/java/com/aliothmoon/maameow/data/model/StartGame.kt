@@ -8,7 +8,9 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.putJsonArray
 
 @Serializable
-class StartGame : TaskParamProvider {
+data class StartGame(
+    val clientType: String = DEFAULT_CLIENT_TYPE,
+) : TaskParamProvider {
     override fun toTaskParams(): MaaTaskParams {
         val paramsJson = buildJsonObject {
             putJsonArray("task_names") {
@@ -20,5 +22,14 @@ class StartGame : TaskParamProvider {
 
     companion object {
         const val TASK_NAME = "EPIC7@StartGame"
+        const val DEFAULT_CLIENT_TYPE = "com.stove.epic7.google"
+        val CLIENT_TYPES = listOf(
+            DEFAULT_CLIENT_TYPE,
+        )
+
+        fun displayNameOf(clientType: String): String = when (clientType) {
+            DEFAULT_CLIENT_TYPE -> "国际服"
+            else -> clientType
+        }
     }
 }
