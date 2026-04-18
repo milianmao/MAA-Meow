@@ -65,6 +65,7 @@ import com.aliothmoon.maameow.data.model.TaskProfile
 import com.aliothmoon.maameow.data.model.TaskTypeInfo
 import com.aliothmoon.maameow.data.model.WakeUpConfig
 import com.aliothmoon.maameow.presentation.components.ITextField
+import com.aliothmoon.maameow.presentation.components.SelectableChipGroup
 import com.aliothmoon.maameow.presentation.view.panel.fight.FightConfigPanel
 import com.aliothmoon.maameow.presentation.view.panel.mall.MallConfigPanel
 import com.aliothmoon.maameow.presentation.view.panel.roguelike.RoguelikeConfigPanel
@@ -176,10 +177,9 @@ fun TaskConfigPanel(
                             onConfigChange = onConfigChange
                         )
 
-                        is StartGame -> EmptyStateHint(
-                            title = stringResource(R.string.panel_config_empty_view_title),
-                            descriptions = listOf(stringResource(R.string.panel_config_empty_view_desc)),
-                            showReorderHint = false
+                        is StartGame -> StartGameConfigPanel(
+                            config = cfg,
+                            onConfigChange = onConfigChange
                         )
                     }
                 }
@@ -193,6 +193,35 @@ fun TaskConfigPanel(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun StartGameConfigPanel(
+    config: StartGame,
+    onConfigChange: (TaskParamProvider) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(
+                PaddingValues(
+                    start = 12.dp,
+                    end = 12.dp,
+                    top = 2.dp,
+                    bottom = 4.dp
+                )
+            ),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        SelectableChipGroup(
+            label = stringResource(R.string.panel_wakeup_client_type),
+            selectedValue = config.clientType,
+            options = StartGame.CLIENT_TYPES.map { it to StartGame.displayNameOf(it) },
+            onSelected = { onConfigChange(config.copy(clientType = it)) },
+            labelFontWeight = FontWeight.Medium
+        )
     }
 }
 

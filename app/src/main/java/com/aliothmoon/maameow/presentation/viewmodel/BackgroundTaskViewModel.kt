@@ -8,6 +8,8 @@ import com.aliothmoon.maameow.R
 import com.aliothmoon.maameow.RemoteService
 import com.aliothmoon.maameow.constant.Packages
 import com.aliothmoon.maameow.data.model.LogItem
+import com.aliothmoon.maameow.data.model.StartGame
+import com.aliothmoon.maameow.data.model.TaskChainNode
 import com.aliothmoon.maameow.data.model.TaskTypeInfo
 import com.aliothmoon.maameow.data.model.TaskParamProvider
 import com.aliothmoon.maameow.data.preferences.AppSettingsManager
@@ -389,7 +391,8 @@ class BackgroundTaskViewModel(
         doSwitchProfile(request)
 
         if (request == null && state.value.current == PanelTab.EPIC7) {
-            val params = buildEpic7Params(chainState.chain.value)
+            val chain = chainState.chain.value
+            val params = buildEpic7Params(chain)
             if (params.isEmpty()) {
                 val message = uiTextOf(R.string.task_start_error_no_task_selected)
                 Timber.w("Validation failed: %s", message.resolve(application))
@@ -397,7 +400,7 @@ class BackgroundTaskViewModel(
                 return message
             }
 
-            val clientType = chainState.getClientTypeOrNull() ?: "epic7"
+            val clientType = resolveEpic7ClientType(chain)
             val result = compositionService.start(
                 tasks = params,
                 clientType = clientType,
@@ -579,5 +582,12 @@ class BackgroundTaskViewModel(
         coordinator.cancel()
         touchPreviewController.onClear()
         super.onCleared()
+    }
+
+    private fun resolveEpic7ClientType(chain: List<TaskChainNode>): String {
+        return chain
+            .firstOrNull { it.enabled && it.config is StartGame }
+            ?.let { (it.config as StartGame).clientType }
+            ?: StartGame.DEFAULT_CLIENT_TYPE
     }
 }
